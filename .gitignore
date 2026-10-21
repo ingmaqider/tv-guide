@@ -1,0 +1,22 @@
+# Dependencies and build output
+node_modules/
+dist/
+release/
+
+# Private settings (see .env.example)
+.env
+.env.*
+!.env.example
+
+# Local data for browser mode
+epg.xml
+epg.xml.tmp
+favorites.json
+favorites.json.tmp
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

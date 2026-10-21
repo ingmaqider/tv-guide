@@ -1,0 +1,67 @@
+{
+  "name": "tv-guide",
+  "productName": "TV Guide",
+  "description": "TV programme guide for an XMLTV EPG, with VLC playback",
+  "homepage": "https://localhost/tv-guide",
+  "desktopName": "tv-guide.desktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"node server/index.js\" \"vite\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "app": "vite build && electron .",
+    "dist": "vite build && electron-builder --linux AppImage rpm",
+    "dist:win": "vite build && electron-builder --win nsis portable zip --x64"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "vite": "^6.0.7"
+  },
+  "build": {
+    "appId": "local.tvguide.app",
+    "productName": "TV Guide",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "server/**",
+      "electron/**",
+      "package.json"
+    ],
+    "artifactName": "tv-guide-${version}-${arch}.${ext}",
+    "win": {
+      "icon": "build/icon.png",
+      "artifactName": "tv-guide-${version}-windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "tv-guide-setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "tv-guide-portable-${version}.${ext}"
+    },
+    "linux": {
+      "executableName": "tv-guide",
+      "syncDesktopName": true,
+      "maintainer": "TV Guide",
+      "category": "AudioVideo",
+      "icon": "build/icon.png",
+      "synopsis": "TV programme guide"
+    }
+  }
+}
