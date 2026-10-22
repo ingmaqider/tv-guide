@@ -4,6 +4,7 @@ import { dayKey, formatDay, formatTime, progress, useApi, useNow } from '../api.
 import { ChannelLogo, ProgressBar, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
 import PlayButton from '../PlayButton.jsx';
+import PlaylistNotice from '../PlaylistNotice.jsx';
 
 export default function ChannelPage() {
   const { id } = useParams();
@@ -47,6 +48,7 @@ export default function ChannelPage() {
         )}
       </header>
       <main className="content">
+        <PlaylistNotice />
         <Status loading={loading} error={error}>
           {days.length === 0 ? (
             <p className="status">No programme information for this channel.</p>

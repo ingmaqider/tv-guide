@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import PlaylistNotice from './PlaylistNotice.jsx';
 import { ThemeSwitch } from './theme.jsx';
 import UpdateButton from './UpdateButton.jsx';
 
@@ -20,6 +21,7 @@ export default function Layout() {
         </nav>
       </header>
       <main className="content">
+        <PlaylistNotice />
         <Outlet />
       </main>
     </div>

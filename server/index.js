@@ -29,6 +29,8 @@ const PLAYLIST_URL = process.env.PLAYLIST_URL;
 const VLC = process.env.VLC || findVlc();
 const HOST = process.env.HOST || '127.0.0.1';
 const FAVORITES_FILE = path.resolve(process.env.FAVORITES_FILE || path.join(root, 'favorites.json'));
+// Last downloaded playlist, used when the playlist server can't be reached.
+const PLAYLIST_FILE = path.resolve(process.env.PLAYLIST_FILE || path.join(root, 'playlist.json'));
 const PORT = Number(process.env.PORT) || 3001;
 
 // Favorites are a JSON array of channel ids in favorites.json; they don't depend on the EPG being loaded.
@@ -79,8 +81,8 @@ async function load(file, { publishEarly }) {
   version++;
 }
 
-const playlist = new Playlist(PLAYLIST_URL);
-if (PLAYLIST_URL) playlist.refresh().catch((err) => console.error('Failed to load playlist:', err.message));
+const playlist = new Playlist(PLAYLIST_URL, PLAYLIST_FILE);
+if (PLAYLIST_URL) playlist.refresh().catch((err) => console.error(err.message));
 else console.log(`PLAYLIST_URL is not set in ${ENV_FILE}; Play buttons are disabled`);
 
 const initialLoad = load(EPG_FILE, { publishEarly: true }).catch((err) => {
@@ -121,7 +123,7 @@ async function runUpdate() {
     await load(tmp, { publishEarly: false });
     fs.renameSync(tmp, EPG_FILE);
     // Refresh stream links too, so "Update EPG" brings everything up to date.
-    if (PLAYLIST_URL) await playlist.refresh().catch((err) => console.error('Failed to refresh playlist:', err.message));
+    if (PLAYLIST_URL) await playlist.refresh().catch((err) => console.error(err.message));
     update ={ state: 'done', received: update.received, total: update.total, error: null };
     console.log('EPG updated');
   } catch (err) {
@@ -153,6 +155,13 @@ app.post('/api/epg/update', (req, res) => {
   const busy = updating();
   if (!busy) runUpdate();
   res.status(busy ? 409 : 202).json(epgStatus());
+});
+
+// Lets the UI explain missing Play buttons. Polling it also drives the retries while the
+// playlist server is unreachable.
+app.get('/api/playlist', (req, res) => {
+  playlist.ensureFresh();
+  res.json(playlist.status());
 });
 
 app.get('/api/favorites', (req, res) => {

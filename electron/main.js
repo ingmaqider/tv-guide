@@ -36,6 +36,7 @@ function startServer() {
         PORT_FALLBACK: '1',
         EPG_FILE: path.join(data, 'epg.xml'),
         FAVORITES_FILE: path.join(data, 'favorites.json'),
+        PLAYLIST_FILE: path.join(data, 'playlist.json'),
         ENV_FILE: envFile(data),
         DIST_DIR: path.join(root, 'dist'),
       },

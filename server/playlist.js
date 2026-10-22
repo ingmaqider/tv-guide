@@ -1,5 +1,7 @@
 // M3U playlist of stream URLs, matched to EPG channels.
 
+import fs from 'node:fs';
+
 export function parseM3u(text) {
   const entries = [];
   let pending = null;
@@ -31,39 +33,100 @@ function idFromUrl(url) {
 const MAX_AGE_MS = 60 * 60 * 1000;
 const RETRY_MS = 60 * 1000;
 
+// fetch() reports network failures as "fetch failed" with the reason in `cause`.
+function describe(err) {
+  if (err.name === 'TimeoutError') return "the server didn't respond";
+  const code = err.cause?.code;
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return "the server's address couldn't be found";
+  if (code === 'ECONNREFUSED') return 'the server refused the connection';
+  if (code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'ETIMEDOUT') return "the server didn't respond";
+  return err.cause?.message || err.message;
+}
+
 /**
  * Fetches the playlist and finds a channel's stream: by tvg-id, then by the channel id in
- * the stream URL, then by name. Refetched when older than an hour.
+ * the stream URL, then by name. Refetched when older than an hour. Each download is saved
+ * to `cacheFile` and loaded from there at startup, so an unreachable playlist server
+ * doesn't take the Play buttons away.
  */
 export class Playlist {
-  constructor(url) {
+  constructor(url, cacheFile) {
     this.url = url;
+    this.cacheFile = cacheFile;
     this.byId = new Map();
     this.byName = new Map();
-    this.fetchedAt = 0;
+    this.streams = 0;
+    this.updatedAt = null; // when the loaded list was downloaded
+    this.fetchedAt = 0; // last successful download in this run
     this.attemptedAt = 0;
+    this.error = null; // reason the last download failed, if it did
+    this.version = 0; // bumped when the loaded list changes, so clients refetch
     this.pending = null;
+    if (url) this.loadCache();
+  }
+
+  // The cache belongs to one link; a different PLAYLIST_URL starts empty.
+  loadCache() {
+    try {
+      const { url, savedAt, text } = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
+      if (url !== this.url) return;
+      this.use(parseM3u(text), savedAt);
+      console.log(`Loaded saved playlist from ${new Date(savedAt).toISOString()}: ${this.streams} streams`);
+    } catch (err) {
+      if (err.code !== 'ENOENT') console.error('Failed to read saved playlist:', err.message);
+    }
+  }
+
+  // Written atomically and private to the user: it holds the stream links with their token.
+  saveCache(text, savedAt) {
+    const tmp = `${this.cacheFile}.tmp`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify({ url: this.url, savedAt, text }), { mode: 0o600 });
+      fs.renameSync(tmp, this.cacheFile);
+    } catch (err) {
+      console.error('Failed to save playlist:', err.message);
+    }
+  }
+
+  use(entries, updatedAt) {
+    const byId = new Map();
+    const byName = new Map();
+    for (const e of entries) {
+      const id = e.tvgId || idFromUrl(e.url);
+      if (id && !byId.has(id)) byId.set(id, e.url);
+      const name = normalize(e.name);
+      if (!byName.has(name)) byName.set(name, e.url);
+    }
+    this.byId = byId;
+    this.byName = byName;
+    this.streams = entries.length;
+    this.updatedAt = updatedAt;
+    this.version++;
   }
 
   refresh() {
     this.pending ??= (async () => {
       this.attemptedAt = Date.now();
       try {
-        const res = await fetch(this.url, { signal: AbortSignal.timeout(30000) });
-        if (!res.ok) throw new Error(`Playlist download failed: HTTP ${res.status}`);
-        const entries = parseM3u(await res.text());
-        const byId = new Map();
-        const byName = new Map();
-        for (const e of entries) {
-          const id = e.tvgId || idFromUrl(e.url);
-          if (id && !byId.has(id)) byId.set(id, e.url);
-          const name = normalize(e.name);
-          if (!byName.has(name)) byName.set(name, e.url);
+        let text;
+        try {
+          const res = await fetch(this.url, { signal: AbortSignal.timeout(30000) });
+          if (!res.ok) throw new Error(`the server answered HTTP ${res.status}`);
+          text = await res.text();
+        } catch (err) {
+          throw new Error(`Playlist download failed: ${describe(err)}`);
         }
-        this.byId = byId;
-        this.byName = byName;
-        this.fetchedAt = Date.now();
+        const entries = parseM3u(text);
+        if (!entries.length) throw new Error('Playlist download failed: the file has no streams');
+        const now = Date.now();
+        this.use(entries, now);
+        this.saveCache(text, now);
+        this.fetchedAt = now;
+        this.error = null;
         console.log(`Loaded playlist: ${entries.length} streams`);
+      } catch (err) {
+        this.error = err.message;
+        throw err;
       } finally {
         this.pending = null;
       }
@@ -71,14 +134,28 @@ export class Playlist {
     return this.pending;
   }
 
-  // Refreshes a stale playlist (waiting for one already in flight). On failure keeps what
-  // was loaded before, and doesn't retry for a minute so requests don't all wait on it.
+  // Refreshes a stale playlist, keeping what was loaded before if that fails. Only waits for
+  // the download when there's nothing loaded yet (the first one at startup); otherwise it
+  // runs in the background so requests aren't held up by a slow or unreachable server.
   async ensureFresh() {
     if (!this.url) return; // not configured: no channel is playable
-    if (this.pending) return this.pending.catch(() => {});
+    if (this.pending) {
+      if (!this.streams) await this.pending.catch(() => {});
+      return;
+    }
     const stale = Date.now() - this.fetchedAt > MAX_AGE_MS;
     if (!stale || Date.now() - this.attemptedAt < RETRY_MS) return;
-    await this.refresh().catch((err) => console.error('Playlist unavailable:', err.message));
+    this.refresh().catch((err) => console.error(err.message));
+  }
+
+  status() {
+    return {
+      configured: !!this.url,
+      streams: this.streams,
+      updatedAt: this.updatedAt,
+      error: this.error,
+      version: this.version,
+    };
   }
 
   // Stream URL for an EPG channel from the loaded playlist, or null.

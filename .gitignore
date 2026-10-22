@@ -13,6 +13,8 @@ epg.xml
 epg.xml.tmp
 favorites.json
 favorites.json.tmp
+playlist.json
+playlist.json.tmp
 
 # Editors and OS
 .vscode/

@@ -38,7 +38,8 @@ the Electron binary download; run `node node_modules/electron/install.js`.
 | `npm run app` | Build the frontend and run the desktop app from source |
 
 Browser mode keeps its data in the project folder: `epg.xml` (downloaded on first start
-if missing) and `favorites.json`.
+if missing), `favorites.json` and `playlist.json` (the last downloaded playlist, used when
+the playlist server is unreachable; it contains your stream links, so it's git-ignored).
 
 ## Building the desktop app
 
@@ -60,4 +61,4 @@ in its own folder:
 | Windows | `%APPDATA%\TV Guide\` |
 
 Put a `.env` there (same format as `.env.example`). The folder also holds `epg.xml`
-(downloaded on first run) and `favorites.json`.
+(downloaded on first run), `favorites.json` and `playlist.json`.

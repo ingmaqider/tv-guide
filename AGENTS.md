@@ -14,6 +14,10 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     VLC launching, static files.
   - `playlist.js` — M3U parsing and channel matching: tvg-id, then the channel id in the
     stream URL (`/<id>/index.m3u8`, this provider's format), then normalized name.
+    Each download is saved to `playlist.json` (PLAYLIST_FILE) and loaded at startup, so an
+    unreachable playlist server keeps the last list. Refreshes run in the background once
+    something is loaded; `GET /api/playlist` reports the last error, which `PlaylistNotice`
+    shows (it also calls `reloadAll()` when the list changes so Play buttons appear).
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
 - `electron/main.js` — runs `server/index.js` in a `utilityProcess` and loads the UI from
@@ -30,6 +34,7 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
 - **503 means "not loaded yet, retry".** `fetchJson` retries on 503. Endpoints return 503
   until the data they need is parsed (`epg.isLoaded(id)` / `epg.complete`).
 - **Stream URLs never reach the browser.** The API exposes only `playable: boolean`.
+  `playlist.json` holds them with the token: written with mode 0600 and git-ignored.
 - **Scroll restoration depends on the `useApi` cache**: a list must render synchronously
   from cache when navigating back. Don't add loading states that blank cached data.
 - Search state lives in the URL (`?q=`), set with `replace` + `preventScrollReset`.
