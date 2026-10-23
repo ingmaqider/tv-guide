@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Link } from 'react-router-dom';
 import { formatTime, send, useApi } from './api.js';
 import { ChannelLogo } from './components.jsx';
-import { PlayingBadge, useLastPlayed } from './lastPlayed.jsx';
+import { PlayingBadge, usePlayer } from './player.jsx';
 import PlayButton from './PlayButton.jsx';
 
 const TOP = 3;
@@ -142,7 +142,7 @@ const percent = (p) => `${Math.round(p * 100)}%`;
 
 export function RecommendPanel() {
   const { open, status, result, error, message, startedAt, seconds, scope, close } = useRecommend();
-  const { id: playingId } = useLastPlayed();
+  const { playingId } = usePlayer();
   const [showAll, setShowAll] = useState(false);
   if (!open) return null;
 

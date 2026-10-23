@@ -1,5 +1,5 @@
 import express from 'express';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -10,6 +10,7 @@ import { Epg, findCurrent } from './epg.js';
 import { Playlist } from './playlist.js';
 import { LlamaServer, findModel, findServer, splitArgs } from './llama.js';
 import { MAX_WISH, readPrompt, recommend } from './recommend.js';
+import { Vlc } from './vlc.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -34,6 +35,8 @@ const FAVORITES_FILE = path.resolve(process.env.FAVORITES_FILE || path.join(root
 // Last downloaded playlist, used when the playlist server can't be reached.
 const PLAYLIST_FILE = path.resolve(process.env.PLAYLIST_FILE || path.join(root, 'playlist.json'));
 const LAST_PLAYED_FILE = path.resolve(process.env.LAST_PLAYED_FILE || path.join(root, 'last-played.json'));
+// How to reach the VLC window this app opened (port, password, URLs played): see vlc.js.
+const VLC_STATE_FILE = path.resolve(process.env.VLC_STATE_FILE || path.join(root, 'vlc.json'));
 const PORT = Number(process.env.PORT) || 3001;
 // Decision model for "Recommend": llama.cpp's llama-server running a decision model (its
 // /v1/systemone endpoint). LLM_URL points at one that's already running, possibly on
@@ -87,8 +90,8 @@ function writeFavorites(ids) {
 
 let favorites = readFavorites();
 
-// The channel Play was last clicked on ({ id, at }), highlighted in the UI. It records the
-// click, not whether VLC is still playing it.
+// The channel Play was last clicked on ({ id, at }), for the prompt's {{last_played}}. What
+// VLC is actually playing comes from VLC (GET /api/player).
 function readLastPlayed() {
   try {
     const { id, at } = JSON.parse(fs.readFileSync(LAST_PLAYED_FILE, 'utf8'));
@@ -227,10 +230,6 @@ app.get('/api/playlist', (req, res) => {
 // Which optional features are set up, so the UI can hide the rest.
 app.get('/api/config', (req, res) => {
   res.json({ recommend: !!(LLM_URL || llama), playlist: playlist.status().configured });
-});
-
-app.get('/api/last-played', (req, res) => {
-  res.json(lastPlayed ?? { id: null, at: null });
 });
 
 app.get('/api/favorites', (req, res) => {
@@ -425,30 +424,49 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
   }
 });
 
-// Opens the channel's stream in VLC on this machine. --one-instance reuses an open VLC
-// window instead of starting a new one per click. The stream URL (which carries the
-// playlist's access token) never leaves the server.
+const vlc = new Vlc({ bin: VLC, env: vlcEnv(), stateFile: VLC_STATE_FILE });
+
+// What the VLC window this app opened is doing, with the channel and its programme now.
+async function playerStatus() {
+  const { state, channelId } = await vlc.status();
+  const channel = channelId && epg?.channels.find((c) => c.id === channelId);
+  if (!channel) return { state, channel: null };
+  const list = epg.isLoaded(channel.id) ? epg.programmesOf(channel.id) : [];
+  const p = list[findCurrent(list, Date.now())];
+  return {
+    state,
+    channel: { id: channel.id, name: channel.name, icon: channel.icon },
+    programme: p ? { start: p.start, stop: p.stop, title: p.title } : null,
+  };
+}
+
+app.get('/api/player', async (req, res) => {
+  res.json(await playerStatus());
+});
+
+app.post('/api/player/:command', async (req, res) => {
+  if (!['pause', 'stop'].includes(req.params.command)) return res.status(404).json({ error: 'Unknown command' });
+  if (!(await vlc.command(req.params.command))) return res.status(409).json({ error: 'VLC is not open' });
+  res.json(await playerStatus());
+});
+
+// Opens the channel's stream in VLC on this machine, in the window opened earlier if it's
+// still there. The stream URL (which carries the playlist's access token) never leaves
+// the server.
 app.post('/api/channels/:id/play', async (req, res) => {
   const channel = epg.channels.find((c) => c.id === req.params.id);
   if (!channel) return res.status(404).json({ error: 'Channel not found' });
   const url = await playlist.streamFor(channel);
   if (!url) return res.status(404).json({ error: 'This channel is not in the playlist' });
 
-  const vlc = spawn(VLC, ['--one-instance', `--meta-title=${channel.name}`, url], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    env: vlcEnv(),
-  });
-  vlc.once('error', (err) => {
+  try {
+    await vlc.play(url, channel.id, channel.name);
+  } catch (err) {
     console.error('Failed to start VLC:', err);
-    res.status(500).json({ error: `Could not start VLC (${err.code || err.message})` });
-  });
-  vlc.once('spawn', () => {
-    vlc.unref();
-    setLastPlayed(channel.id);
-    res.json({ ok: true, lastPlayed });
-  });
+    return res.status(500).json({ error: `Could not start VLC (${err.code || err.message})` });
+  }
+  setLastPlayed(channel.id);
+  res.json(await playerStatus());
 });
 
 // Serve the built frontend (npm run build) if present.

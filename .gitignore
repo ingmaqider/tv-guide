@@ -31,3 +31,5 @@ Thumbs.db
 # llama.cpp builds and models for the bundled decision model (see README)
 vendor/llama/
 models/
+vlc.json
+vlc.json.tmp

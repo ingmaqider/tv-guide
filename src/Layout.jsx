@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { NowPlaying } from './player.jsx';
 import PlaylistNotice from './PlaylistNotice.jsx';
 import { RecommendButton, RecommendPanel } from './recommend.jsx';
 import { ThemeSwitch } from './theme.jsx';
@@ -16,6 +17,7 @@ export default function Layout() {
             <ThemeSwitch />
           </div>
         </div>
+        <NowPlaying />
         <nav className="tabs">
           <NavLink to="/favorites" className="tab">Favorites</NavLink>
           <NavLink to="/now" className="tab">Now</NavLink>
