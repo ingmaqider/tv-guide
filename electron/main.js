@@ -38,6 +38,7 @@ function startServer() {
         FAVORITES_FILE: path.join(data, 'favorites.json'),
         PLAYLIST_FILE: path.join(data, 'playlist.json'),
         LAST_PLAYED_FILE: path.join(data, 'last-played.json'),
+        VLC_STATE_FILE: path.join(data, 'vlc.json'),
         RECOMMEND_PROMPT_FILE: path.join(data, 'recommend-prompt.txt'),
         // A model (.gguf) put here is run with the bundled llama.cpp; see README.
         MODELS_DIR: path.join(data, 'models'),

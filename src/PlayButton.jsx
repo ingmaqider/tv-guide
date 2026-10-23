@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { send } from './api.js';
-import { useLastPlayed } from './lastPlayed.jsx';
+import { usePlayer } from './player.jsx';
 
 // Asks the server to open the channel's stream in VLC. `compact` is the icon-only
 // version used in list rows.
 export default function PlayButton({ channelId, compact = false }) {
   const [state, setState] = useState({ status: 'idle', message: null });
-  const { setId: setLastPlayed } = useLastPlayed();
+  const { update } = usePlayer();
 
   const play = async () => {
     setState({ status: 'starting', message: null });
@@ -14,7 +14,7 @@ export default function PlayButton({ channelId, compact = false }) {
       const res = await send(`/api/channels/${encodeURIComponent(channelId)}/play`, 'POST');
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setLastPlayed(body.lastPlayed.id);
+      update(body);
       setState({ status: 'idle', message: 'Opening in VLC…' });
     } catch (err) {
       setState({ status: 'idle', message: `Couldn't play: ${err.message}`, error: true });

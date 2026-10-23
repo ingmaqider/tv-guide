@@ -11,7 +11,8 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     Parsing runs in passes (`parseProgrammes(ids)`) and yields to the event loop.
   - `index.js` — settings, staged loading (channels → favorites' programmes → the rest),
     EPG update (download → gunzip to `epg.xml.tmp` → parse → swap → rename), favorites,
-    VLC launching, the last-played channel (`last-played.json`, set when VLC starts),
+    the player routes, the last-played channel (`last-played.json`, set on Play; used by
+    the prompt's `{{last_played}}`),
     static files.
   - `playlist.js` — M3U parsing and channel matching: tvg-id, then the channel id in the
     stream URL (`/<id>/index.m3u8`, this provider's format), then normalized name.
@@ -19,6 +20,13 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     unreachable playlist server keeps the last list. Refreshes run in the background once
     something is loaded; `GET /api/playlist` reports the last error, which `PlaylistNotice`
     shows (it also calls `reloadAll()` when the list changes so Play buttons appear).
+  - `vlc.js` — the VLC window the app opens, through VLC's HTTP interface (started with
+    `--extraintf=http`, a free 127.0.0.1 port, a random password, `--no-one-instance`).
+    Play reuses the window (`in_play`), else starts a new one. `GET /api/player` maps the
+    current item's URL back to a channel; `POST /api/player/pause|stop`. VLC applies
+    switches and stops after a second or two, so `status()` reports the expected state
+    until it does. Port, password and played URLs are saved in `vlc.json` (0600: URLs carry
+    the token) so a restarted app reconnects to a VLC that's still open.
   - `recommend.js` — "Recommend": fills the prompt template (`readPrompt`, re-read per
     request; sections `[state]`, `[instructions]`, `[option]`; `{{name}}` plus
     `{{#name}}…{{/name}}` / `{{^name}}…{{/name}}` blocks, unknown names throw; `{{wish}}`
@@ -35,7 +43,7 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     via `extraResources`), `LLAMA_SERVER` or PATH.
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
-  - `favorites.jsx`, `lastPlayed.jsx`, `recommend.jsx` — app-wide state as small context
+  - `favorites.jsx`, `player.jsx` (polls `/api/player`; `NowPlaying` bar), `recommend.jsx` — app-wide state as small context
     providers (above the router, so it survives navigation).
 - `electron/main.js` — runs `server/index.js` in a `utilityProcess` and loads the UI from
   it over http://127.0.0.1. Settings and data live in `app.getPath('userData')`.
@@ -70,8 +78,11 @@ There is no test suite. Verify changes by running the app:
 - Server: `PORT=3099 EPG_FILE=... FAVORITES_FILE=... node server/index.js`, then curl the
   API. Use copies of `epg.xml` / `favorites.json` so real data isn't modified.
 - UI: drive the built app (`npm run build` + `npm start`) with Playwright.
-- VLC: set `VLC=/path/to/script` to a stub that records its arguments instead of
-  opening a player.
+- VLC: set `VLC=/path/to/script` to a wrapper that records its arguments and runs
+  `vlc -I dummy --vout dummy --aout dummy "$@"`, so no window opens but the HTTP interface
+  works. Use a fake playlist pointing at local HLS (ffmpeg `-f hls`) instead of real
+  streams. Find test VLCs by their `--http-port` (not `pkill -f`, which can hit the user's
+  VLC or your own shell).
 - Recommend: needs a llama-server with a decision GGUF; the user runs H2O Lightning
   (`~/models/h2o-lightning-4b-gguf/h2o-lightning-4b-Q8_0.gguf`, usually on
   127.0.0.1:9931). Set `LLM_URL`, and `RECOMMEND_PROMPT_FILE` to a temp copy so the

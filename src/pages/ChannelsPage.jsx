@@ -2,14 +2,14 @@ import { Link } from 'react-router-dom';
 import { useApi } from '../api.js';
 import { ChannelLogo, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
-import { PlayingBadge, useLastPlayed } from '../lastPlayed.jsx';
+import { PlayingBadge, usePlayer } from '../player.jsx';
 import PlayButton from '../PlayButton.jsx';
 import { SearchBox, useChannelSearch } from '../search.jsx';
 
 export default function ChannelsPage() {
   const { data, error, loading } = useApi('/api/channels');
   const { query, setQuery, filtered } = useChannelSearch(data);
-  const { id: playingId } = useLastPlayed();
+  const { playingId } = usePlayer();
 
   return (
     <>

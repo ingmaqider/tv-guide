@@ -5,8 +5,9 @@ in VLC. Runs in the browser or as a desktop app (Electron) on Linux and Windows.
 
 - **Favorites / Now / Channels** tabs: what's on now and next, with search by channel name
 - Channel schedule by day, with the current programme highlighted
-- ☆ favorites, ▶ play in VLC (for channels in your M3U playlist); the channel you last
-  played is highlighted
+- ☆ favorites, ▶ play in VLC (for channels in your M3U playlist). The app opens one VLC
+  window and reuses it; the header shows what it's playing, with Pause and Stop, and the
+  channel is highlighted in the lists. A VLC you opened yourself is left alone.
 - **Update EPG** downloads a fresh guide and reloads it without a restart
 - **Recommend** asks a local decision model what to watch now, with a prompt you can tune
 - Light / dark / auto theme; scroll position kept when going back to a list
@@ -40,9 +41,10 @@ the Electron binary download; run `node node_modules/electron/install.js`.
 | `npm run app` | Build the frontend and run the desktop app from source |
 
 Browser mode keeps its data in the project folder: `epg.xml` (downloaded on first start
-if missing), `favorites.json`, `last-played.json`, `recommend-prompt.txt` and `playlist.json`
-(the last downloaded playlist, used when the playlist server is unreachable; it contains your stream links, so it's
-git-ignored).
+if missing), `favorites.json`, `last-played.json`, `recommend-prompt.txt`, `playlist.json`
+(the last downloaded playlist, used when the playlist server is unreachable) and `vlc.json`
+(how to reach the VLC window the app opened). The last two contain your stream links, so
+they're git-ignored.
 
 ## Recommendations (local decision model)
 
@@ -137,5 +139,5 @@ in its own folder:
 | Windows | `%APPDATA%\TV Guide\` |
 
 Put a `.env` there (same format as `.env.example`). The folder also holds `epg.xml`
-(downloaded on first run), `favorites.json`, `last-played.json`, `playlist.json` and
-`recommend-prompt.txt`.
+(downloaded on first run), `favorites.json`, `last-played.json`, `playlist.json`,
+`vlc.json` and `recommend-prompt.txt`.

@@ -404,4 +404,22 @@ body {
 }
 
 .playing-badge { white-space: nowrap; }
+.playing-badge.paused, .playing-badge.opening { background: var(--muted); }
+
+.now-playing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+.now-playing-state { color: var(--accent); font-weight: 700; white-space: nowrap; }
+.now-playing-title { flex: 1; min-width: 0; color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-playing-title:hover strong { text-decoration: underline; }
+.now-playing-controls { display: flex; gap: 6px; }
 .channel-header h1 .playing-badge { font-size: 12px; vertical-align: 4px; }
