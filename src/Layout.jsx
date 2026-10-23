@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import PlaylistNotice from './PlaylistNotice.jsx';
+import { RecommendButton, RecommendPanel } from './recommend.jsx';
 import { ThemeSwitch } from './theme.jsx';
 import UpdateButton from './UpdateButton.jsx';
 
@@ -10,6 +11,7 @@ export default function Layout() {
         <div className="header-top">
           <h1>TV Guide</h1>
           <div className="header-actions">
+            <RecommendButton />
             <UpdateButton />
             <ThemeSwitch />
           </div>
@@ -22,6 +24,7 @@ export default function Layout() {
       </header>
       <main className="content">
         <PlaylistNotice />
+        <RecommendPanel />
         <Outlet />
       </main>
     </div>

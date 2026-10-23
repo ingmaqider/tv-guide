@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { Epg, findCurrent } from './epg.js';
 import { Playlist } from './playlist.js';
+import { MAX_WISH, readPrompt, recommend } from './recommend.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -31,7 +32,25 @@ const HOST = process.env.HOST || '127.0.0.1';
 const FAVORITES_FILE = path.resolve(process.env.FAVORITES_FILE || path.join(root, 'favorites.json'));
 // Last downloaded playlist, used when the playlist server can't be reached.
 const PLAYLIST_FILE = path.resolve(process.env.PLAYLIST_FILE || path.join(root, 'playlist.json'));
+const LAST_PLAYED_FILE = path.resolve(process.env.LAST_PLAYED_FILE || path.join(root, 'last-played.json'));
 const PORT = Number(process.env.PORT) || 3001;
+// Decision model for "Recommend": llama.cpp's llama-server running a decision model (its
+// /v1/systemone endpoint), possibly on another machine on the LAN.
+const LLM_URL = process.env.LLM_URL;
+const LLM_MODEL = process.env.LLM_MODEL;
+const LLM_API_KEY = process.env.LLM_API_KEY;
+const LLM_TIMEOUT_MS = (Number(process.env.LLM_TIMEOUT) || 120) * 1000;
+// Which channels Recommend considers; the UI picks one per request.
+const RECOMMEND_SCOPES = {
+  favorites: 'your favorite channels',
+  playable: 'playable channels',
+  all: 'any channel',
+};
+const RECOMMEND_BATCH = Number(process.env.RECOMMEND_BATCH) || 16;
+const RECOMMEND_PARALLEL = Number(process.env.LLM_PARALLEL) || 1;
+const RECOMMEND_DESC_CHARS = Number(process.env.RECOMMEND_DESC_CHARS) || 600;
+const RECOMMEND_PROMPT_FILE = path.resolve(process.env.RECOMMEND_PROMPT_FILE || path.join(root, 'recommend-prompt.txt'));
+const DEFAULT_PROMPT_FILE = path.join(root, 'server', 'recommend-prompt.txt');
 
 // Favorites are a JSON array of channel ids in favorites.json; they don't depend on the EPG being loaded.
 function readFavorites() {
@@ -51,6 +70,31 @@ function writeFavorites(ids) {
 }
 
 let favorites = readFavorites();
+
+// The channel Play was last clicked on ({ id, at }), highlighted in the UI. It records the
+// click, not whether VLC is still playing it.
+function readLastPlayed() {
+  try {
+    const { id, at } = JSON.parse(fs.readFileSync(LAST_PLAYED_FILE, 'utf8'));
+    return typeof id === 'string' ? { id, at } : null;
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Failed to read last played channel:', err);
+    return null;
+  }
+}
+
+let lastPlayed = readLastPlayed();
+
+function setLastPlayed(id) {
+  lastPlayed = { id, at: Date.now() };
+  try {
+    const tmp = `${LAST_PLAYED_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(lastPlayed));
+    fs.renameSync(tmp, LAST_PLAYED_FILE);
+  } catch (err) {
+    console.error('Failed to save last played channel:', err);
+  }
+}
 
 let epg = null;
 let loadError = null;
@@ -162,6 +206,15 @@ app.post('/api/epg/update', (req, res) => {
 app.get('/api/playlist', (req, res) => {
   playlist.ensureFresh();
   res.json(playlist.status());
+});
+
+// Which optional features are set up, so the UI can hide the rest.
+app.get('/api/config', (req, res) => {
+  res.json({ recommend: !!LLM_URL, playlist: playlist.status().configured });
+});
+
+app.get('/api/last-played', (req, res) => {
+  res.json(lastPlayed ?? { id: null, at: null });
 });
 
 app.get('/api/favorites', (req, res) => {
@@ -277,6 +330,75 @@ app.get('/api/channels/:id', async (req, res) => {
   });
 });
 
+// Ranks what's on now with the decision model. `scope` picks the channels: favorites (the
+// default, a few model calls), playable (in the playlist) or all in the EPG (many calls).
+// POST because each call costs model runs.
+app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => {
+  if (!LLM_URL) return res.status(400).json({ error: `LLM_URL is not set. Add it to ${ENV_FILE} and restart.` });
+  // What the viewer typed for this request ("something funny"); fills {{wish}}.
+  const wish = typeof req.body?.wish === 'string' ? req.body.wish.replace(/\s+/g, ' ').trim() : '';
+  if (wish.length > MAX_WISH) return res.status(400).json({ error: `Keep the wish under ${MAX_WISH} characters.` });
+  const scope = req.body?.scope ?? 'favorites';
+  if (!Object.hasOwn(RECOMMEND_SCOPES, scope)) return res.status(400).json({ error: `Unknown scope "${scope}".` });
+  const onlyFavorites = scope === 'favorites';
+  if (onlyFavorites ? !favorites.every((id) => epg.isLoaded(id)) : !epg.complete) return notReady(res);
+  if (!onlyFavorites) await playlist.ensureFresh();
+
+  const now = Date.now();
+  const ids = new Set(favorites);
+  const wanted = (channel) =>
+    scope === 'all' || (onlyFavorites ? ids.has(channel.id) : !!playlist.lookup(channel));
+  const candidates = [];
+  for (const channel of epg.channels) {
+    if (!wanted(channel)) continue;
+    const list = epg.programmesOf(channel.id);
+    const p = list[findCurrent(list, now)];
+    if (p) candidates.push({ channel, programme: { start: p.start, stop: p.stop, title: p.title, ...epg.details(p) } });
+  }
+  if (!candidates.length) {
+    const hint = onlyFavorites ? ' Add favorites with ☆ first.' : '';
+    return res.status(400).json({ error: `Nothing is on now on ${RECOMMEND_SCOPES[scope]}.${hint}` });
+  }
+
+  try {
+    const prompt = readPrompt(RECOMMEND_PROMPT_FILE, DEFAULT_PROMPT_FILE);
+    const names = new Map(epg.channels.map((ch) => [ch.id, ch.name]));
+    const result = await recommend({
+      url: LLM_URL,
+      model: LLM_MODEL,
+      apiKey: LLM_API_KEY,
+      prompt,
+      candidates,
+      batchSize: RECOMMEND_BATCH,
+      parallel: RECOMMEND_PARALLEL,
+      descChars: RECOMMEND_DESC_CHARS,
+      favorites: favorites.map((id) => names.get(id)).filter(Boolean),
+      lastPlayed: lastPlayed && names.get(lastPlayed.id),
+      wish,
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
+    res.json({
+      model: result.model,
+      promptFile: RECOMMEND_PROMPT_FILE,
+      request: result.request,
+      considered: candidates.length,
+      eliminated: result.eliminated,
+      calls: result.calls,
+      ranked: result.ranked.map(({ channel, programme, probability }) => ({
+        id: channel.id,
+        name: channel.name,
+        icon: channel.icon,
+        playable: !!playlist.lookup(channel),
+        programme: { start: programme.start, stop: programme.stop, title: programme.title },
+        probability,
+      })),
+    });
+  } catch (err) {
+    console.error('Recommend failed:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Opens the channel's stream in VLC on this machine. --one-instance reuses an open VLC
 // window instead of starting a new one per click. The stream URL (which carries the
 // playlist's access token) never leaves the server.
@@ -298,7 +420,8 @@ app.post('/api/channels/:id/play', async (req, res) => {
   });
   vlc.once('spawn', () => {
     vlc.unref();
-    res.json({ ok: true });
+    setLastPlayed(channel.id);
+    res.json({ ok: true, lastPlayed });
   });
 });
 

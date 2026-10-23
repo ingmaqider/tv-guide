@@ -4,7 +4,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // For requests that change something; the server rejects them without this header
 // (see server/index.js), which keeps other websites from driving the local server.
-export const send = (url, method) => fetch(url, { method, headers: { 'X-TV-Guide': '1' } });
+export const send = (url, method, body) =>
+  fetch(url, {
+    method,
+    headers: { 'X-TV-Guide': '1', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 
 // Fetches JSON, retrying while the server is still parsing the EPG (HTTP 503).
 export async function fetchJson(url, signal) {

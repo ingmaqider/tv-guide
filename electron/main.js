@@ -37,6 +37,8 @@ function startServer() {
         EPG_FILE: path.join(data, 'epg.xml'),
         FAVORITES_FILE: path.join(data, 'favorites.json'),
         PLAYLIST_FILE: path.join(data, 'playlist.json'),
+        LAST_PLAYED_FILE: path.join(data, 'last-played.json'),
+        RECOMMEND_PROMPT_FILE: path.join(data, 'recommend-prompt.txt'),
         ENV_FILE: envFile(data),
         DIST_DIR: path.join(root, 'dist'),
       },

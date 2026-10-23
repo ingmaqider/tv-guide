@@ -15,6 +15,11 @@ favorites.json
 favorites.json.tmp
 playlist.json
 playlist.json.tmp
+last-played.json
+last-played.json.tmp
+# Your copy of server/recommend-prompt.txt
+recommend-prompt.txt
+!server/recommend-prompt.txt
 
 # Editors and OS
 .vscode/

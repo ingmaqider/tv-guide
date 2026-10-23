@@ -7,6 +7,8 @@ import ChannelsPage from './pages/ChannelsPage.jsx';
 import ChannelPage from './pages/ChannelPage.jsx';
 import FavoritesPage from './pages/FavoritesPage.jsx';
 import { FavoritesProvider } from './favorites.jsx';
+import { LastPlayedProvider } from './lastPlayed.jsx';
+import { RecommendProvider } from './recommend.jsx';
 import ScrollButtons from './ScrollButtons.jsx';
 import './styles.css';
 
@@ -45,7 +47,11 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <FavoritesProvider>
-      <RouterProvider router={router} />
+      <LastPlayedProvider>
+        <RecommendProvider>
+          <RouterProvider router={router} />
+        </RecommendProvider>
+      </LastPlayedProvider>
     </FavoritesProvider>
   </React.StrictMode>,
 );

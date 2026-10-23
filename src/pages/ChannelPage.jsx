@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { dayKey, formatDay, formatTime, progress, useApi, useNow } from '../api.js';
 import { ChannelLogo, ProgressBar, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
+import { PlayingBadge, useLastPlayed } from '../lastPlayed.jsx';
 import PlayButton from '../PlayButton.jsx';
 import PlaylistNotice from '../PlaylistNotice.jsx';
 
@@ -14,6 +15,7 @@ export default function ChannelPage() {
   const now = useNow();
   const [day, setDay] = useState(() => dayKey(Date.now()));
   const currentRef = useRef(null);
+  const { id: playingId } = useLastPlayed();
 
   // Go back to wherever we came from (keeps the search query); fall back to the list.
   const goBack = () => (location.key !== 'default' ? navigate(-1) : navigate('/channels'));
@@ -41,7 +43,10 @@ export default function ChannelPage() {
         {data && (
           <div className="channel-header">
             <ChannelLogo channel={data.channel} />
-            <h1>{data.channel.name}</h1>
+            <h1>
+              {data.channel.name}
+              {data.channel.id === playingId && <PlayingBadge />}
+            </h1>
             <StarButton channelId={data.channel.id} />
             {data.playable && <PlayButton channelId={data.channel.id} />}
           </div>

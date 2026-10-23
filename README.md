@@ -5,8 +5,10 @@ in VLC. Runs in the browser or as a desktop app (Electron) on Linux and Windows.
 
 - **Favorites / Now / Channels** tabs: what's on now and next, with search by channel name
 - Channel schedule by day, with the current programme highlighted
-- ☆ favorites, ▶ play in VLC (for channels in your M3U playlist)
+- ☆ favorites, ▶ play in VLC (for channels in your M3U playlist); the channel you last
+  played is highlighted
 - **Update EPG** downloads a fresh guide and reloads it without a restart
+- **Recommend** asks a local decision model what to watch now, with a prompt you can tune
 - Light / dark / auto theme; scroll position kept when going back to a list
 
 ## Requirements
@@ -38,8 +40,57 @@ the Electron binary download; run `node node_modules/electron/install.js`.
 | `npm run app` | Build the frontend and run the desktop app from source |
 
 Browser mode keeps its data in the project folder: `epg.xml` (downloaded on first start
-if missing), `favorites.json` and `playlist.json` (the last downloaded playlist, used when
-the playlist server is unreachable; it contains your stream links, so it's git-ignored).
+if missing), `favorites.json`, `last-played.json`, `recommend-prompt.txt` and `playlist.json`
+(the last downloaded playlist, used when the playlist server is unreachable; it contains your stream links, so it's
+git-ignored).
+
+## Recommendations (local decision model)
+
+**Recommend** asks a decision model which programme on now to watch, and shows the top
+picks with their probabilities. The model runs in llama.cpp's `llama-server`, which
+answers typed decisions on `POST /v1/systemone`. The server can run on another machine on
+your LAN, so the Windows app can use a GPU on a Linux box.
+
+Each request is one `choice` question. The state describes you, the options are the
+programmes (channel name plus title, time and EPG description), and the model gives
+every option a probability. More programmes than `RECOMMEND_BATCH` (16 by default, up to
+255) are ranked in rounds: the best of each batch go on to the next round.
+
+On the machine with the GPU, with llama.cpp build 11773 or later and a decision GGUF, for
+example [H2O Lightning 4B](https://huggingface.co/h2oai/h2o-lightning-4b-gguf)
+(`h2o-lightning-4b-Q8_0.gguf`; the `stock-` files have no decision metadata):
+
+```bash
+./build/bin/llama-server -m ~/models/h2o-lightning-4b-gguf/h2o-lightning-4b-Q8_0.gguf \
+  --alias h2o-lightning-4b -c 40960 -np 1 --no-kv-unified --no-mmproj \
+  --host 0.0.0.0 --port 9931 --api-key <some-secret>
+```
+
+Open that port in the machine's firewall for your LAN only.
+
+In the TV Guide `.env` (on every machine running the app):
+
+```
+LLM_URL=http://<gpu-machine-ip>:9931
+LLM_API_KEY=<some-secret>
+```
+
+The panel's switch picks which channels to consider: **Favorites** (the default, a few
+seconds), **Playable** (channels in your playlist) or **All** channels in the EPG. The last
+two take many more model calls, so they're slower; the panel shows the time so far.
+See `.env.example` for the other settings: batch size and description length.
+
+The prompt is `recommend-prompt.txt` in the data folder (the project folder in browser
+mode), created from `server/recommend-prompt.txt` the first time you press Recommend. It
+has three sections: `[state]` (you and your tastes), `[instructions]` (the question) and
+`[option]` (how each programme is described). It's re-read on every request, and the
+panel's **Request** section shows exactly what was sent.
+
+The box in the Recommend panel takes a wish for this time ("something funny", "a film in
+English"); press Enter or **Ask**. It fills `{{wish}}` in the prompt. Any placeholder can
+also switch text on or off: `{{#wish}}…{{/wish}}` is kept only when there is a wish,
+`{{^wish}}…{{/wish}}` only when there isn't. The comments at the top of the file list the
+placeholders; an unknown one is reported as an error instead of being sent.
 
 ## Building the desktop app
 
@@ -61,4 +112,5 @@ in its own folder:
 | Windows | `%APPDATA%\TV Guide\` |
 
 Put a `.env` there (same format as `.env.example`). The folder also holds `epg.xml`
-(downloaded on first run), `favorites.json` and `playlist.json`.
+(downloaded on first run), `favorites.json`, `last-played.json`, `playlist.json` and
+`recommend-prompt.txt`.

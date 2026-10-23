@@ -1,0 +1,43 @@
+# Prompt for "Recommend". Edit freely: it's re-read on every request, no restart needed.
+#
+# It fills a `choice` question for the decision model's /v1/systemone endpoint; the model's
+# own template lays it out. Lines starting with # are comments. The sections:
+#   [state]         what the model knows: you, your tastes, the time. Sent as the `state`.
+#   [instructions]  the question it answers about the state.
+#   [option]        how each programme on now is described (one line). Each option's key
+#                   is the channel name; this is its description.
+#
+# Placeholders filled in by the app:
+#   [state] and [instructions]:
+#     {{now}}          current date and time, e.g. "Thursday, 23 October 2026 at 20:15"
+#     {{favorites}}    names of your favorite channels
+#     {{last_played}}  the channel you last pressed Play on, or "nothing yet"
+#     {{wish}}         what you typed in the Recommend box this time, or empty
+#   [option]:
+#     {{title}}        programme title
+#     {{time}}         start–end, e.g. "20:00–21:30"
+#     {{description}}  programme description from the EPG (cut to RECOMMEND_DESC_CHARS)
+#     {{channel}}      channel name
+#
+# Conditional blocks, for any placeholder:
+#   {{#wish}}…{{/wish}}  kept only when there is a wish
+#   {{^wish}}…{{/wish}}  kept only when there isn't
+# An unknown placeholder is an error (shown in the app), so typos don't reach the model.
+
+[state]
+Viewer profile.
+Likes: films, documentaries, smart entertainment.
+Dislikes: talk shows, news, teleshopping, reruns of soap operas.
+Favorite channels: {{favorites}}.
+Last watched: {{last_played}}.
+Current time: {{now}}.
+{{#wish}}
+Right now the viewer asks for: {{wish}}
+{{/wish}}
+
+[instructions]
+{{#wish}}Which of the programmes on TV right now best fits what the viewer asks for?{{/wish}}
+{{^wish}}Which of the programmes on TV right now should this viewer watch?{{/wish}}
+
+[option]
+{{title}} ({{time}}).{{#description}} {{description}}{{/description}}

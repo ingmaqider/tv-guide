@@ -2,20 +2,25 @@ import { Link } from 'react-router-dom';
 import { formatTime, progress, useNow } from './api.js';
 import { ChannelLogo, ProgressBar } from './components.jsx';
 import { StarButton } from './favorites.jsx';
+import { PlayingBadge, useLastPlayed } from './lastPlayed.jsx';
 import PlayButton from './PlayButton.jsx';
 
 // Channels with what's on now and next; shared by the Now and Favorites tabs.
 export default function NowList({ channels }) {
   const now = useNow();
+  const { id: playingId } = useLastPlayed();
 
   return (
     <ul className="list">
       {channels.map((ch) => (
-        <li key={ch.id} className="row">
+        <li key={ch.id} className={`row ${ch.id === playingId ? 'playing' : ''}`}>
           <Link to={`/channels/${ch.id}`} className="row-link">
             <ChannelLogo channel={ch} />
             <div className="row-body">
-              <div className="channel-name">{ch.name}</div>
+              <div className="channel-name">
+                {ch.name}
+                {ch.id === playingId && <PlayingBadge />}
+              </div>
               {ch.current ? (
                 <>
                   <div className="programme-title">

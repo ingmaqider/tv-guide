@@ -227,6 +227,9 @@ body {
 
 .row:hover { border-color: var(--accent); }
 
+/* The channel Play was last clicked on. */
+.row.playing { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+
 .row-link {
   flex: 1;
   min-width: 0;
@@ -308,6 +311,38 @@ body {
   font-size: 14px;
 }
 
+.recommend {
+  margin-bottom: 16px;
+  padding: 12px 14px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+.recommend-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.recommend-head h2 { margin: 0; font-size: 16px; }
+.recommend-close { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px 8px; }
+.recommend-close:hover { color: var(--text); }
+.recommend-error { color: #d33; margin: 4px 0 8px; }
+.recommend-scope { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+.recommend-scope .theme-switch button:disabled { cursor: progress; }
+.wish { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.wish-input { flex: 1; width: auto; min-width: 0; margin-bottom: 0; padding: 8px 12px; font-size: 15px; }
+.recommend .row:last-child { margin-bottom: 8px; }
+.probability { flex-shrink: 0; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.link-button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 14px; }
+.recommend-details { margin: 8px 0 4px; font-size: 14px; }
+.recommend-details summary { cursor: pointer; color: var(--muted); }
+.recommend-details pre {
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .status { color: var(--muted); text-align: center; padding: 40px 0; }
 .status.error { color: #d33; }
 
@@ -367,3 +402,6 @@ body {
   font-weight: 700;
   vertical-align: 2px;
 }
+
+.playing-badge { white-space: nowrap; }
+.channel-header h1 .playing-badge { font-size: 12px; vertical-align: 4px; }

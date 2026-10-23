@@ -11,15 +11,26 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     Parsing runs in passes (`parseProgrammes(ids)`) and yields to the event loop.
   - `index.js` — settings, staged loading (channels → favorites' programmes → the rest),
     EPG update (download → gunzip to `epg.xml.tmp` → parse → swap → rename), favorites,
-    VLC launching, static files.
+    VLC launching, the last-played channel (`last-played.json`, set when VLC starts),
+    static files.
   - `playlist.js` — M3U parsing and channel matching: tvg-id, then the channel id in the
     stream URL (`/<id>/index.m3u8`, this provider's format), then normalized name.
     Each download is saved to `playlist.json` (PLAYLIST_FILE) and loaded at startup, so an
     unreachable playlist server keeps the last list. Refreshes run in the background once
     something is loaded; `GET /api/playlist` reports the last error, which `PlaylistNotice`
     shows (it also calls `reloadAll()` when the list changes so Play buttons appear).
+  - `recommend.js` — "Recommend": fills the prompt template (`readPrompt`, re-read per
+    request; sections `[state]`, `[instructions]`, `[option]`; `{{name}}` plus
+    `{{#name}}…{{/name}}` / `{{^name}}…{{/name}}` blocks, unknown names throw; `{{wish}}`
+    is the text typed in the panel, POSTed as `{ wish, scope }`; scope is favorites
+    (default), playable or all, chosen in the panel) into one `choice` question
+    for llama-server's `/v1/systemone` (decision models such as H2O Lightning; not chat
+    completions). Option keys are channel names; strings are NFC-normalized. More
+    candidates than `RECOMMEND_BATCH` run as knockout rounds.
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
+  - `favorites.jsx`, `lastPlayed.jsx`, `recommend.jsx` — app-wide state as small context
+    providers (above the router, so it survives navigation).
 - `electron/main.js` — runs `server/index.js` in a `utilityProcess` and loads the UI from
   it over http://127.0.0.1. Settings and data live in `app.getPath('userData')`.
 
@@ -55,6 +66,11 @@ There is no test suite. Verify changes by running the app:
 - UI: drive the built app (`npm run build` + `npm start`) with Playwright.
 - VLC: set `VLC=/path/to/script` to a stub that records its arguments instead of
   opening a player.
+- Recommend: needs a llama-server with a decision GGUF; the user runs H2O Lightning
+  (`~/models/h2o-lightning-4b-gguf/h2o-lightning-4b-Q8_0.gguf`, usually on
+  127.0.0.1:9931). Set `LLM_URL`, and `RECOMMEND_PROMPT_FILE` to a temp copy so the
+  user's prompt isn't modified. Don't use the `stock-` GGUFs: they have no decision
+  metadata (llama-server answers 501).
 - Desktop app: Playwright's `_electron.launch` with `--ozone-platform=headless` and
   `XDG_CONFIG_HOME` pointing at a temp dir (isolates userData; put a `.env` in
   `<dir>/TV Guide/`). Note CDP-injected keys skip `before-input-event`; use
