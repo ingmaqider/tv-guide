@@ -27,3 +27,7 @@ recommend-prompt.txt
 *.swp
 .DS_Store
 Thumbs.db
+
+# llama.cpp builds and models for the bundled decision model (see README)
+vendor/llama/
+models/

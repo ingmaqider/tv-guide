@@ -56,7 +56,11 @@ programmes (channel name plus title, time and EPG description), and the model gi
 every option a probability. More programmes than `RECOMMEND_BATCH` (16 by default, up to
 255) are ranked in rounds: the best of each batch go on to the next round.
 
-On the machine with the GPU, with llama.cpp build 11773 or later and a decision GGUF, for
+The app can use a llama-server that's already running (below), or start its own (see
+[Running the model inside the app](#running-the-model-inside-the-app)).
+
+On the machine with the GPU, with a llama.cpp that supports H2O Lightning (#30361: nightly
+b11840 or later works; the v0.7.0 release is too old) and a decision GGUF, for
 example [H2O Lightning 4B](https://huggingface.co/h2oai/h2o-lightning-4b-gguf)
 (`h2o-lightning-4b-Q8_0.gguf`; the `stock-` files have no decision metadata):
 
@@ -91,6 +95,27 @@ English"); press Enter or **Ask**. It fills `{{wish}}` in the prompt. Any placeh
 also switch text on or off: `{{#wish}}…{{/wish}}` is kept only when there is a wish,
 `{{^wish}}…{{/wish}}` only when there isn't. The comments at the top of the file list the
 placeholders; an unknown one is reported as an error instead of being sent.
+
+### Running the model inside the app
+
+Without `LLM_URL`, the app starts llama-server itself when it finds a model, and stops it
+when the app closes. It listens on 127.0.0.1 only, on a free port, with a random API key.
+The model loads at startup; until it's ready the panel says "Loading the model…".
+
+- **Model**: put the `.gguf` in a `models` folder in the data folder (e.g.
+  `%APPDATA%\TV Guide\models\` on Windows), or set `LLM_MODEL_FILE`. `stock-` and
+  `mmproj` files are skipped.
+- **llama-server**: the copy bundled with the app (below), else `LLAMA_SERVER`, else
+  `llama-server` on `PATH`. It runs with `-c 40960 -np 1 --no-kv-unified --no-mmproj`; add
+  options with `LLAMA_ARGS` (e.g. `-fa on`, `-ngl 99`).
+
+To bundle llama.cpp, put a build in `vendor/llama/win/` (Windows) or `vendor/llama/linux/`
+before `npm run dist:win` / `npm run dist`: `llama-server` with all its DLLs or `.so` files,
+straight in that folder. It ends up in the package's `resources/llama/`. Use a build with
+H2O Lightning support, e.g. llama.cpp's nightly zips (`llama-b11840-bin-win-vulkan-x64.zip` or later): the Vulkan build only needs the GPU driver;
+the CUDA build is faster on NVIDIA but also needs the CUDA runtime DLLs (the matching
+`cudart-…` zip). Models aren't bundled: at 4.5 GB, H2O Lightning Q8_0 is over the Windows
+installer's size limit.
 
 ## Building the desktop app
 

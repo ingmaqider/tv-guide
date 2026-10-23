@@ -44,9 +44,11 @@ export function RecommendProvider({ children }) {
     const startedAt = Date.now();
     setState((s) => ({ ...s, open: true, status: 'loading', error: null, startedAt }));
     try {
-      // The server answers 503 while favorites' schedules are still loading.
+      // The server answers 503 while the EPG or the bundled model is still loading.
       let res;
       while ((res = await send('/api/recommend', 'POST', { wish: text, scope })).status === 503) {
+        const { message } = await res.json().catch(() => ({}));
+        setState((s) => ({ ...s, message }));
         await new Promise((r) => setTimeout(r, 1000));
       }
       const body = await res.json();
@@ -139,7 +141,7 @@ function WishForm() {
 const percent = (p) => `${Math.round(p * 100)}%`;
 
 export function RecommendPanel() {
-  const { open, status, result, error, startedAt, seconds, scope, close } = useRecommend();
+  const { open, status, result, error, message, startedAt, seconds, scope, close } = useRecommend();
   const { id: playingId } = useLastPlayed();
   const [showAll, setShowAll] = useState(false);
   if (!open) return null;
@@ -163,7 +165,7 @@ export function RecommendPanel() {
       </div>
       {status === 'loading' && (
         <p className="muted">
-          Asking the model… <Elapsed since={startedAt} />
+          {message || 'Asking the model…'} <Elapsed since={startedAt} />
         </p>
       )}
       {status === 'error' && <p className="recommend-error">{error}</p>}

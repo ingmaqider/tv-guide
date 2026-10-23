@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { Epg, findCurrent } from './epg.js';
 import { Playlist } from './playlist.js';
+import { LlamaServer, findModel, findServer, splitArgs } from './llama.js';
 import { MAX_WISH, readPrompt, recommend } from './recommend.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,8 +36,14 @@ const PLAYLIST_FILE = path.resolve(process.env.PLAYLIST_FILE || path.join(root, 
 const LAST_PLAYED_FILE = path.resolve(process.env.LAST_PLAYED_FILE || path.join(root, 'last-played.json'));
 const PORT = Number(process.env.PORT) || 3001;
 // Decision model for "Recommend": llama.cpp's llama-server running a decision model (its
-// /v1/systemone endpoint), possibly on another machine on the LAN.
+// /v1/systemone endpoint). LLM_URL points at one that's already running, possibly on
+// another machine on the LAN. Without it, the app starts its own llama-server if it finds
+// a model: LLM_MODEL_FILE, or the first .gguf in MODELS_DIR or the llama.cpp folder.
 const LLM_URL = process.env.LLM_URL;
+// llama.cpp bundled with the app (vendor/llama/<os>/ when running from source).
+const LLAMA_DIR = path.resolve(process.env.LLAMA_DIR || path.join(root, 'vendor', 'llama', process.platform === 'win32' ? 'win' : process.platform));
+const MODELS_DIR = path.resolve(process.env.MODELS_DIR || path.join(root, 'models'));
+const LLM_MODEL_FILE = LLM_URL ? null : findModel(process.env.LLM_MODEL_FILE, [MODELS_DIR, LLAMA_DIR]);
 const LLM_MODEL = process.env.LLM_MODEL;
 const LLM_API_KEY = process.env.LLM_API_KEY;
 const LLM_TIMEOUT_MS = (Number(process.env.LLM_TIMEOUT) || 120) * 1000;
@@ -48,6 +55,15 @@ const RECOMMEND_SCOPES = {
 };
 const RECOMMEND_BATCH = Number(process.env.RECOMMEND_BATCH) || 16;
 const RECOMMEND_PARALLEL = Number(process.env.LLM_PARALLEL) || 1;
+const llama = LLM_MODEL_FILE
+  ? new LlamaServer({
+      bin: findServer(process.env.LLAMA_SERVER, LLAMA_DIR),
+      model: path.resolve(LLM_MODEL_FILE),
+      parallel: RECOMMEND_PARALLEL,
+      ctx: Number(process.env.LLAMA_CTX) || 40960,
+      extraArgs: splitArgs(process.env.LLAMA_ARGS),
+    })
+  : null;
 const RECOMMEND_DESC_CHARS = Number(process.env.RECOMMEND_DESC_CHARS) || 600;
 const RECOMMEND_PROMPT_FILE = path.resolve(process.env.RECOMMEND_PROMPT_FILE || path.join(root, 'recommend-prompt.txt'));
 const DEFAULT_PROMPT_FILE = path.join(root, 'server', 'recommend-prompt.txt');
@@ -210,7 +226,7 @@ app.get('/api/playlist', (req, res) => {
 
 // Which optional features are set up, so the UI can hide the rest.
 app.get('/api/config', (req, res) => {
-  res.json({ recommend: !!LLM_URL, playlist: playlist.status().configured });
+  res.json({ recommend: !!(LLM_URL || llama), playlist: playlist.status().configured });
 });
 
 app.get('/api/last-played', (req, res) => {
@@ -334,7 +350,18 @@ app.get('/api/channels/:id', async (req, res) => {
 // default, a few model calls), playable (in the playlist) or all in the EPG (many calls).
 // POST because each call costs model runs.
 app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => {
-  if (!LLM_URL) return res.status(400).json({ error: `LLM_URL is not set. Add it to ${ENV_FILE} and restart.` });
+  if (!LLM_URL && !llama) {
+    return res.status(400).json({ error: `No model set up. Add LLM_URL or LLM_MODEL_FILE to ${ENV_FILE} and restart.` });
+  }
+  let endpoint = { url: LLM_URL, apiKey: LLM_API_KEY };
+  if (llama) {
+    try {
+      endpoint = llama.endpoint();
+    } catch (err) {
+      return res.status(502).json({ error: err.message });
+    }
+    if (!endpoint) return res.status(503).json({ loading: true, message: 'Loading the model…' });
+  }
   // What the viewer typed for this request ("something funny"); fills {{wish}}.
   const wish = typeof req.body?.wish === 'string' ? req.body.wish.replace(/\s+/g, ' ').trim() : '';
   if (wish.length > MAX_WISH) return res.status(400).json({ error: `Keep the wish under ${MAX_WISH} characters.` });
@@ -364,9 +391,8 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
     const prompt = readPrompt(RECOMMEND_PROMPT_FILE, DEFAULT_PROMPT_FILE);
     const names = new Map(epg.channels.map((ch) => [ch.id, ch.name]));
     const result = await recommend({
-      url: LLM_URL,
+      ...endpoint,
       model: LLM_MODEL,
-      apiKey: LLM_API_KEY,
       prompt,
       candidates,
       batchSize: RECOMMEND_BATCH,
@@ -448,3 +474,16 @@ function listen(port) {
 }
 
 listen(PORT);
+
+// Loading the model takes a while, so it starts with the app rather than on first use.
+llama?.start();
+
+// Don't leave llama-server running (and holding GPU memory) after the app. The desktop app
+// asks with a message: on Windows, killing this process wouldn't run any handler.
+const shutdown = () => {
+  llama?.stop();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.parentPort?.on('message', (e) => e.data?.type === 'quit' && shutdown());

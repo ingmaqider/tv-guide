@@ -39,6 +39,9 @@ function startServer() {
         PLAYLIST_FILE: path.join(data, 'playlist.json'),
         LAST_PLAYED_FILE: path.join(data, 'last-played.json'),
         RECOMMEND_PROMPT_FILE: path.join(data, 'recommend-prompt.txt'),
+        // A model (.gguf) put here is run with the bundled llama.cpp; see README.
+        MODELS_DIR: path.join(data, 'models'),
+        ...(app.isPackaged && { LLAMA_DIR: path.join(process.resourcesPath, 'llama') }),
         ENV_FILE: envFile(data),
         DIST_DIR: path.join(root, 'dist'),
       },
@@ -120,8 +123,20 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => {
+  // The server stops its llama-server before exiting; give it a moment, then force it.
+  app.on('before-quit', (event) => {
+    if (!server || quitting) return;
     quitting = true;
-    server?.kill();
+    event.preventDefault();
+    const done = () => {
+      server = null;
+      app.quit();
+    };
+    server.once('exit', done);
+    server.postMessage({ type: 'quit' });
+    setTimeout(() => {
+      server?.kill();
+      done();
+    }, 3000);
   });
 }

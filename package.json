@@ -62,6 +62,16 @@
       "category": "AudioVideo",
       "icon": "build/icon.png",
       "synopsis": "TV programme guide"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "vendor/llama/${os}",
+        "to": "llama",
+        "filter": [
+          "**/*",
+          "!*.gguf"
+        ]
+      }
+    ]
   }
 }

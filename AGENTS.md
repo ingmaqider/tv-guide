@@ -27,6 +27,12 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     for llama-server's `/v1/systemone` (decision models such as H2O Lightning; not chat
     completions). Option keys are channel names; strings are NFC-normalized. More
     candidates than `RECOMMEND_BATCH` run as knockout rounds.
+  - `llama.js` — runs llama-server as a child process when `LLM_URL` isn't set and a model
+    is found (`LLM_MODEL_FILE`, `MODELS_DIR`): free 127.0.0.1 port, random API key, waits on
+    `/health`, restarts after a crash on the next request. Stopped on SIGTERM/SIGINT or a
+    `{type:'quit'}` message from Electron (needed on Windows, where kill runs no handlers).
+    The binary comes from `LLAMA_DIR` (`vendor/llama/<os>/`, packaged as `resources/llama`
+    via `extraResources`), `LLAMA_SERVER` or PATH.
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
   - `favorites.jsx`, `lastPlayed.jsx`, `recommend.jsx` — app-wide state as small context
@@ -70,7 +76,11 @@ There is no test suite. Verify changes by running the app:
   (`~/models/h2o-lightning-4b-gguf/h2o-lightning-4b-Q8_0.gguf`, usually on
   127.0.0.1:9931). Set `LLM_URL`, and `RECOMMEND_PROMPT_FILE` to a temp copy so the
   user's prompt isn't modified. Don't use the `stock-` GGUFs: they have no decision
-  metadata (llama-server answers 501).
+  metadata (llama-server answers 501). For the in-app server, leave `LLM_URL` unset and
+  set `LLAMA_SERVER=~/fun/opensrc/llama.cpp/build/bin/llama-server` plus `MODELS_DIR`
+  (or `LLM_MODEL_FILE`); it starts its own copy on a free port, so the user's server on
+  9931 is unaffected. That build's RUNPATH is absolute, so a copy finds its libraries
+  through the `LD_LIBRARY_PATH` llama.js sets.
 - Desktop app: Playwright's `_electron.launch` with `--ozone-platform=headless` and
   `XDG_CONFIG_HOME` pointing at a temp dir (isolates userData; put a `.env` in
   `<dir>/TV Guide/`). Note CDP-injected keys skip `before-input-event`; use
