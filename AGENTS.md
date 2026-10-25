@@ -20,6 +20,11 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     unreachable playlist server keeps the last list. Refreshes run in the background once
     something is loaded; `GET /api/playlist` reports the last error, which `PlaylistNotice`
     shows (it also calls `reloadAll()` when the list changes so Play buttons appear).
+    `extras(epg.channels)` lists playlist entries no EPG channel matches, with ids
+    `m3u-<sha1 of the normalized name>` (`isExtra`): stable when the token in the URL
+    changes, and the URL itself never reaches the browser. The API marks them
+    `noGuide: true`; `findChannel()` / `streamOf()` in index.js cover both kinds, and
+    favorites checks skip them (`favoritesLoaded()`: there's no schedule to wait for).
   - `vlc.js` — the VLC window the app opens, through VLC's HTTP interface (started with
     `--extraintf=http`, a free 127.0.0.1 port, a random password, `--no-one-instance`).
     Play reuses the window (`in_play`), else starts a new one. `GET /api/player` maps the
@@ -34,7 +39,8 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     (default), playable or all, chosen in the panel) into one `choice` question
     for llama-server's `/v1/systemone` (decision models such as H2O Lightning; not chat
     completions). Option keys are channel names; strings are NFC-normalized. More
-    candidates than `RECOMMEND_BATCH` run as knockout rounds.
+    candidates than `RECOMMEND_BATCH` run as knockout rounds. Stop in the panel aborts
+    the fetch; the route aborts its model calls when the connection closes.
   - `llama.js` — runs llama-server as a child process when `LLM_URL` isn't set and a model
     is found (`LLM_MODEL_FILE`, `MODELS_DIR`): free 127.0.0.1 port, random API key, waits on
     `/health`, restarts after a crash on the next request. Stopped on SIGTERM/SIGINT or a

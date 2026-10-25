@@ -9,6 +9,10 @@
   --accent-soft: #e8efff;
   --warn-bg: #fff7e0;
   --warn-border: #f0d07a;
+  /* Playlist-only channels (no guide data) */
+  --alt: #b45309;
+  --alt-soft: #fdf0dc;
+  --on-alt: #fff;
   color-scheme: light;
 }
 
@@ -21,8 +25,11 @@
     --border: #2a2e36;
     --accent: #6b9bff;
     --accent-soft: #1e2a44;
-  --warn-bg: #2e2714;
-  --warn-border: #6b5520;
+    --warn-bg: #2e2714;
+    --warn-border: #6b5520;
+    --alt: #f0a748;
+    --alt-soft: #3a2a14;
+    --on-alt: #1f1405;
     color-scheme: dark;
   }
 }
@@ -37,6 +44,9 @@
   --accent-soft: #1e2a44;
   --warn-bg: #2e2714;
   --warn-border: #6b5520;
+  --alt: #f0a748;
+  --alt-soft: #3a2a14;
+  --on-alt: #1f1405;
   color-scheme: dark;
 }
 
@@ -126,6 +136,8 @@ body {
 
 .play-icon:hover { background: var(--accent); color: #fff; }
 .play-icon:disabled { opacity: 0.6; cursor: progress; }
+.play-icon.no-guide { background: var(--alt-soft); color: var(--alt); }
+.play-icon.no-guide:hover, .play-button.no-guide { background: var(--alt); color: var(--on-alt); }
 
 /* Sits in the margin beside the 900px column when there's room (≳1000px wide); on narrow
    windows it overlaps rows, so .content gets bottom padding to scroll the last ones clear. */
@@ -405,6 +417,7 @@ body {
 
 .playing-badge { white-space: nowrap; }
 .playing-badge.paused, .playing-badge.opening { background: var(--muted); }
+.no-guide-badge { background: var(--alt); color: var(--on-alt); white-space: nowrap; }
 
 .now-playing {
   display: flex;

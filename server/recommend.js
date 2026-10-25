@@ -92,7 +92,7 @@ function optionKeys(candidates) {
 
 // One model call: ranks up to MAX_OPTIONS candidates. Returns { model, request, ranked }
 // with ranked = [{ ...candidate, probability }] sorted best first.
-async function rankBatch(candidates, { url, model, apiKey, prompt, context, descChars, timeoutMs }) {
+async function rankBatch(candidates, { url, model, apiKey, prompt, context, descChars, timeoutMs, signal }) {
   const keys = optionKeys(candidates);
   const request = {
     ...(model && { model }),
@@ -112,9 +112,10 @@ async function rankBatch(candidates, { url, model, apiKey, prompt, context, desc
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(apiKey && { Authorization: `Bearer ${apiKey}` }) },
       body: JSON.stringify(request),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
+    if (signal?.aborted) throw signal.reason;
     const reason = err.name === 'TimeoutError' ? `no answer in ${timeoutMs / 1000} s` : err.cause?.code || err.message;
     throw new Error(`Can't reach the model at ${url} (${reason})`);
   }
@@ -179,7 +180,11 @@ export async function recommend({ candidates, batchSize, parallel, favorites, la
     last_played: lastPlayed || 'nothing yet',
     wish: wish || '',
   };
-  const call = (batch) => rankBatch(batch, { ...options, context });
+  // Stopped by the caller (options.signal): no further batches are sent.
+  const call = (batch) => {
+    options.signal?.throwIfAborted();
+    return rankBatch(batch, { ...options, context });
+  };
 
   let pool = candidates;
   let calls = 0;

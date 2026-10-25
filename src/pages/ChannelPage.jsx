@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { dayKey, formatDay, formatTime, progress, useApi, useNow } from '../api.js';
-import { ChannelLogo, ProgressBar, Status } from '../components.jsx';
+import { ChannelLogo, NoGuideBadge, ProgressBar, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
 import { PlayingBadge, usePlayer } from '../player.jsx';
 import PlayButton from '../PlayButton.jsx';
@@ -46,9 +46,10 @@ export default function ChannelPage() {
             <h1>
               {data.channel.name}
               {data.channel.id === playingId && <PlayingBadge />}
+              {data.noGuide && <NoGuideBadge />}
             </h1>
             <StarButton channelId={data.channel.id} />
-            {data.playable && <PlayButton channelId={data.channel.id} />}
+            {data.playable && <PlayButton channelId={data.channel.id} noGuide={data.noGuide} />}
           </div>
         )}
       </header>
@@ -56,7 +57,11 @@ export default function ChannelPage() {
         <PlaylistNotice />
         <Status loading={loading} error={error}>
           {days.length === 0 ? (
-            <p className="status">No programme information for this channel.</p>
+            <p className="status">
+              {data?.noGuide
+                ? "This channel is in your playlist but not in the programme guide, so there's no schedule. You can still play it."
+                : 'No programme information for this channel.'}
+            </p>
           ) : (
             <>
               <div className="days">

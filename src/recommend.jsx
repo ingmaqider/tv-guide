@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatTime, send, useApi } from './api.js';
 import { ChannelLogo } from './components.jsx';
@@ -36,33 +36,51 @@ export function RecommendProvider({ children }) {
   const [state, setState] = useState({ open: false, status: 'idle' });
   const [wish, setWish] = useState(loadWish);
   const [scope, setScope] = useState('favorites');
+  // Aborting the request closes the connection, which makes the server stop calling the model.
+  const running = useRef(null);
 
   // `wish` is the free text typed in the panel; the server puts it into the prompt's
   // {{wish}} placeholder.
   const run = useCallback(async (text, scope) => {
     saveWish(text);
+    running.current?.abort();
+    const controller = new AbortController();
+    running.current = controller;
+    const { signal } = controller;
     const startedAt = Date.now();
-    setState((s) => ({ ...s, open: true, status: 'loading', error: null, startedAt }));
+    const seconds = () => Math.round((Date.now() - startedAt) / 1000);
+    setState((s) => ({ ...s, open: true, status: 'loading', error: null, message: null, startedAt }));
     try {
       // The server answers 503 while the EPG or the bundled model is still loading.
       let res;
-      while ((res = await send('/api/recommend', 'POST', { wish: text, scope })).status === 503) {
+      while ((res = await send('/api/recommend', 'POST', { wish: text, scope }, signal)).status === 503) {
         const { message } = await res.json().catch(() => ({}));
         setState((s) => ({ ...s, message }));
         await new Promise((r) => setTimeout(r, 1000));
+        signal.throwIfAborted();
       }
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setState({ open: true, status: 'done', result: body, seconds: Math.round((Date.now() - startedAt) / 1000) });
+      setState({ open: true, status: 'done', result: body, seconds: seconds() });
     } catch (err) {
-      setState({ open: true, status: 'error', error: err.message });
+      // Stopped: the panel stays open (unless closed) so you can change the wish and ask again.
+      if (signal.aborted) setState((s) => (s.open ? { open: true, status: 'stopped', seconds: seconds() } : s));
+      else setState({ open: true, status: 'error', error: err.message });
+    } finally {
+      if (running.current === controller) running.current = null;
     }
   }, []);
 
+  const stop = useCallback(() => running.current?.abort(), []);
   const show = useCallback(() => setState((s) => ({ ...s, open: true })), []);
-  const close = useCallback(() => setState({ open: false, status: 'idle' }), []);
-  const value = useMemo(() => ({ ...state, wish, setWish, scope, setScope, run, show, close }),
-    [state, wish, scope, run, show, close],);
+  const close = useCallback(() => {
+    setState({ open: false, status: 'idle' });
+    running.current?.abort();
+  }, []);
+  const value = useMemo(
+    () => ({ ...state, wish, setWish, scope, setScope, run, stop, show, close }),
+    [state, wish, scope, run, stop, show, close],
+  );
   return <RecommendContext.Provider value={value}>{children}</RecommendContext.Provider>;
 }
 
@@ -112,7 +130,7 @@ function ScopeSwitch() {
 
 // The wish box: focused when the panel opens, Enter asks.
 function WishForm() {
-  const { status, wish, setWish, scope, run } = useRecommend();
+  const { status, wish, setWish, scope, run, stop } = useRecommend();
   const loading = status === 'loading';
   return (
     <form
@@ -131,9 +149,17 @@ function WishForm() {
         placeholder="What are you in the mood for?"
         aria-label="What are you in the mood for"
       />
-      <button className="update-button" type="submit" disabled={loading}>
-        {loading ? 'Thinking…' : 'Ask'}
-      </button>
+      {/* Separate keys: reusing one element would turn it back into a submit button while
+          the click on Stop is still being handled, and the form would ask again. */}
+      {loading ? (
+        <button key="stop" className="update-button" type="button" onClick={stop}>
+          Stop
+        </button>
+      ) : (
+        <button key="ask" className="update-button" type="submit">
+          Ask
+        </button>
+      )}
     </form>
   );
 }
@@ -153,9 +179,7 @@ export function RecommendPanel() {
     <section className="recommend" aria-live="polite">
       <div className="recommend-head">
         <h2>Recommended now</h2>
-        {status !== 'loading' && (
-          <button className="recommend-close" onClick={close} aria-label="Close recommendations">✕</button>
-        )}
+        <button className="recommend-close" onClick={close} aria-label="Close recommendations">✕</button>
       </div>
 
       <WishForm />
@@ -169,6 +193,7 @@ export function RecommendPanel() {
         </p>
       )}
       {status === 'error' && <p className="recommend-error">{error}</p>}
+      {status === 'stopped' && <p className="muted">Stopped after {seconds} s.</p>}
 
       {status === 'done' && (
         <>

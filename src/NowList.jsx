@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatTime, progress, useNow } from './api.js';
-import { ChannelLogo, ProgressBar } from './components.jsx';
+import { ChannelLogo, NoGuideBadge, ProgressBar } from './components.jsx';
 import { StarButton } from './favorites.jsx';
 import { PlayingBadge, usePlayer } from './player.jsx';
 import PlayButton from './PlayButton.jsx';
@@ -20,6 +20,7 @@ export default function NowList({ channels }) {
               <div className="channel-name">
                 {ch.name}
                 {ch.id === playingId && <PlayingBadge />}
+                {ch.noGuide && <NoGuideBadge />}
               </div>
               {ch.current ? (
                 <>
@@ -32,7 +33,7 @@ export default function NowList({ channels }) {
                   <ProgressBar value={progress(ch.current, now)} />
                 </>
               ) : (
-                <div className="muted">No programme information</div>
+                <div className="muted">{ch.noGuide ? 'Not in the programme guide' : 'No programme information'}</div>
               )}
               {ch.next && (
                 <div className="muted small">
@@ -41,7 +42,7 @@ export default function NowList({ channels }) {
               )}
             </div>
           </Link>
-          {ch.playable && <PlayButton channelId={ch.id} compact />}
+          {ch.playable && <PlayButton channelId={ch.id} compact noGuide={ch.noGuide} />}
           <StarButton channelId={ch.id} />
         </li>
       ))}

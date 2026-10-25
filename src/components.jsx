@@ -23,3 +23,10 @@ export function ProgressBar({ value }) {
     </div>
   );
 }
+
+// A channel from the playlist that the EPG doesn't list: playable, but no schedule.
+export const NoGuideBadge = () => (
+  <span className="badge no-guide-badge" title="In your playlist, but not in the programme guide">
+    No guide
+  </span>
+);

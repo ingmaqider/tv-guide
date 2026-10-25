@@ -1,6 +1,12 @@
 // M3U playlist of stream URLs, matched to EPG channels.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+
+// Ids for playlist channels that aren't in the EPG. Made from the name, not the URL: the
+// URL carries the token (which must not reach the browser) and changes with it.
+export const EXTRA_PREFIX = 'm3u-';
+export const isExtra = (id) => id.startsWith(EXTRA_PREFIX);
 
 export function parseM3u(text) {
   const entries = [];
@@ -9,7 +15,11 @@ export function parseM3u(text) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith('#EXTINF')) {
-      pending = { name: line.slice(line.indexOf(',') + 1).trim(), tvgId: /tvg-id="([^"]*)"/.exec(line)?.[1] };
+      pending = {
+        name: line.slice(line.indexOf(',') + 1).trim(),
+        tvgId: /tvg-id="([^"]*)"/.exec(line)?.[1],
+        logo: /tvg-logo="([^"]*)"/.exec(line)?.[1] || null,
+      };
     } else if (!line.startsWith('#') && pending) {
       entries.push({ ...pending, url: line });
       pending = null;
@@ -55,6 +65,8 @@ export class Playlist {
     this.cacheFile = cacheFile;
     this.byId = new Map();
     this.byName = new Map();
+    this.entries = [];
+    this.extraCache = null;
     this.streams = 0;
     this.updatedAt = null; // when the loaded list was downloaded
     this.fetchedAt = 0; // last successful download in this run
@@ -99,6 +111,8 @@ export class Playlist {
     }
     this.byId = byId;
     this.byName = byName;
+    this.entries = entries;
+    this.extraCache = null;
     this.streams = entries.length;
     this.updatedAt = updatedAt;
     this.version++;
@@ -166,5 +180,30 @@ export class Playlist {
   async streamFor(channel) {
     await this.ensureFresh();
     return this.lookup(channel);
+  }
+
+  // Playlist channels none of the EPG `channels` match: [{ id, name, icon, url }], in
+  // playlist order. Cached until the playlist or the EPG changes.
+  extras(channels) {
+    if (this.extraCache?.channels === channels) return this.extraCache.list;
+    const matched = new Set(channels.map((ch) => this.lookup(ch)).filter(Boolean));
+    const seenUrls = new Set();
+    const ids = new Map();
+    const list = [];
+    for (const e of this.entries || []) {
+      if (matched.has(e.url) || seenUrls.has(e.url)) continue;
+      seenUrls.add(e.url);
+      const base = EXTRA_PREFIX + crypto.createHash('sha1').update(normalize(e.name)).digest('hex').slice(0, 10);
+      const n = (ids.get(base) || 0) + 1;
+      ids.set(base, n);
+      list.push({ id: n === 1 ? base : `${base}-${n}`, name: e.name, icon: e.logo, url: e.url });
+    }
+    this.extraCache = { channels, list, byId: new Map(list.map((x) => [x.id, x])) };
+    return list;
+  }
+
+  extra(channels, id) {
+    this.extras(channels);
+    return this.extraCache.byId.get(id) || null;
   }
 }

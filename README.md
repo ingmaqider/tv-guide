@@ -9,6 +9,8 @@ in VLC. Runs in the browser or as a desktop app (Electron) on Linux and Windows.
   window and reuses it; the header shows what it's playing, with Pause and Stop, and the
   channel is highlighted in the lists. A VLC you opened yourself is left alone.
 - **Update EPG** downloads a fresh guide and reloads it without a restart
+- Channels that are in your playlist but not in the EPG are listed too, marked **No guide**
+  (with an amber Play button): you can play and favorite them, but there's no schedule
 - **Recommend** asks a local decision model what to watch now, with a prompt you can tune
 - Light / dark / auto theme; scroll position kept when going back to a list
 
@@ -83,7 +85,8 @@ LLM_API_KEY=<some-secret>
 
 The panel's switch picks which channels to consider: **Favorites** (the default, a few
 seconds), **Playable** (channels in your playlist) or **All** channels in the EPG. The last
-two take many more model calls, so they're slower; the panel shows the time so far.
+two take many more model calls, so they're slower; the panel shows the time so far, and
+**Stop** cancels the run (no further model calls are made).
 See `.env.example` for the other settings: batch size and description length.
 
 The prompt is `recommend-prompt.txt` in the data folder (the project folder in browser

@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { Epg, findCurrent } from './epg.js';
-import { Playlist } from './playlist.js';
+import { Playlist, isExtra } from './playlist.js';
 import { LlamaServer, findModel, findServer, splitArgs } from './llama.js';
 import { MAX_WISH, readPrompt, recommend } from './recommend.js';
 import { Vlc } from './vlc.js';
@@ -255,6 +255,15 @@ app.delete('/api/favorites/:id', (req, res) => {
 // 503 tells the client the data it asked for is still being parsed and to retry.
 const notReady = (res) => res.status(503).json({ loading: true });
 
+// Playlist channels the EPG doesn't have, as the API shows them (without the stream URL).
+const extras = () => playlist.extras(epg.channels).map(({ url, ...ch }) => ({ ...ch, playable: true, noGuide: true }));
+// An EPG channel, or a playlist-only one (which carries its `url`: keep it on the server).
+const findChannel = (id) =>
+  epg.channels.find((c) => c.id === id) || (isExtra(id) ? playlist.extra(epg.channels, id) : null);
+const streamOf = async (channel) => (isExtra(channel.id) ? channel.url : playlist.streamFor(channel));
+// Favorites' schedules are parsed; playlist-only favorites have none to wait for.
+const favoritesLoaded = () => favorites.every((id) => isExtra(id) || epg.isLoaded(id));
+
 app.use('/api', (req, res, next) => {
   if (loadError && !updating()) {
     // No EPG at all: if the download attempt failed, its reason is the more useful message.
@@ -268,14 +277,14 @@ app.use('/api', (req, res, next) => {
 // `playable`: the channel is in the playlist, so the UI can offer a Play button.
 app.get('/api/channels', async (req, res) => {
   await playlist.ensureFresh();
-  res.json(epg.channels.map((ch) => ({ ...ch, playable: !!playlist.lookup(ch) })));
+  res.json([...epg.channels.map((ch) => ({ ...ch, playable: !!playlist.lookup(ch) })), ...extras()]);
 });
 
 // ?favorites=1 limits the result to favorite channels, which are available before the rest.
 app.get('/api/now', async (req, res) => {
   const onlyFavorites = req.query.favorites !== undefined;
   const ids = onlyFavorites && new Set(favorites);
-  if (onlyFavorites ? !favorites.every((id) => epg.isLoaded(id)) : !epg.complete) return notReady(res);
+  if (onlyFavorites ? !favoritesLoaded() : !epg.complete) return notReady(res);
   await playlist.ensureFresh();
 
   const now = Date.now();
@@ -283,17 +292,21 @@ app.get('/api/now', async (req, res) => {
   const channels = ids ? epg.channels.filter((ch) => ids.has(ch.id)) : epg.channels;
   res.json({
     time: now,
-    channels: channels.map((ch) => {
-      const list = epg.programmesOf(ch.id);
-      const i = findCurrent(list, now);
-      const nextIndex = i >= 0 ? i + 1 : list.findIndex((p) => p.start > now);
-      return {
-        ...ch,
-        playable: !!playlist.lookup(ch),
-        current: i >= 0 ? strip(list[i]) : null,
-        next: nextIndex >= 0 ? strip(list[nextIndex]) || null : null,
-      };
-    }),
+    channels: [
+      ...channels.map((ch) => {
+        const list = epg.programmesOf(ch.id);
+        const i = findCurrent(list, now);
+        const nextIndex = i >= 0 ? i + 1 : list.findIndex((p) => p.start > now);
+        return {
+          ...ch,
+          playable: !!playlist.lookup(ch),
+          current: i >= 0 ? strip(list[i]) : null,
+          next: nextIndex >= 0 ? strip(list[nextIndex]) || null : null,
+        };
+      }),
+      // Favorited playlist-only channels go last: there's nothing on them to show.
+      ...(ids ? extras().filter((ch) => ids.has(ch.id)) : []).map((ch) => ({ ...ch, current: null, next: null })),
+    ],
   });
 });
 
@@ -330,8 +343,13 @@ function vlcEnv() {
 }
 
 app.get('/api/channels/:id', async (req, res) => {
-  const channel = epg.channels.find((c) => c.id === req.params.id);
+  await playlist.ensureFresh();
+  const channel = findChannel(req.params.id);
   if (!channel) return res.status(404).json({ error: 'Channel not found' });
+  if (isExtra(channel.id)) {
+    const { url, ...rest } = channel;
+    return res.json({ channel: rest, playable: true, noGuide: true, programmes: [] });
+  }
   if (!epg.isLoaded(channel.id)) return notReady(res);
   res.json({
     channel,
@@ -367,7 +385,7 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
   const scope = req.body?.scope ?? 'favorites';
   if (!Object.hasOwn(RECOMMEND_SCOPES, scope)) return res.status(400).json({ error: `Unknown scope "${scope}".` });
   const onlyFavorites = scope === 'favorites';
-  if (onlyFavorites ? !favorites.every((id) => epg.isLoaded(id)) : !epg.complete) return notReady(res);
+  if (onlyFavorites ? !favoritesLoaded() : !epg.complete) return notReady(res);
   if (!onlyFavorites) await playlist.ensureFresh();
 
   const now = Date.now();
@@ -386,9 +404,13 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
     return res.status(400).json({ error: `Nothing is on now on ${RECOMMEND_SCOPES[scope]}.${hint}` });
   }
 
+  // Stop in the panel (or closing the window) drops the connection: abort the model calls.
+  const abort = new AbortController();
+  res.on('close', () => abort.abort());
+
   try {
     const prompt = readPrompt(RECOMMEND_PROMPT_FILE, DEFAULT_PROMPT_FILE);
-    const names = new Map(epg.channels.map((ch) => [ch.id, ch.name]));
+    const names = new Map([...epg.channels, ...extras()].map((ch) => [ch.id, ch.name]));
     const result = await recommend({
       ...endpoint,
       model: LLM_MODEL,
@@ -401,6 +423,7 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
       lastPlayed: lastPlayed && names.get(lastPlayed.id),
       wish,
       timeoutMs: LLM_TIMEOUT_MS,
+      signal: abort.signal,
     });
     res.json({
       model: result.model,
@@ -419,6 +442,7 @@ app.post('/api/recommend', express.json({ limit: '16kb' }), async (req, res) => 
       })),
     });
   } catch (err) {
+    if (abort.signal.aborted) return console.log('Recommend stopped');
     console.error('Recommend failed:', err.message);
     res.status(502).json({ error: err.message });
   }
@@ -429,9 +453,9 @@ const vlc = new Vlc({ bin: VLC, env: vlcEnv(), stateFile: VLC_STATE_FILE });
 // What the VLC window this app opened is doing, with the channel and its programme now.
 async function playerStatus() {
   const { state, channelId } = await vlc.status();
-  const channel = channelId && epg?.channels.find((c) => c.id === channelId);
+  const channel = channelId && epg && findChannel(channelId);
   if (!channel) return { state, channel: null };
-  const list = epg.isLoaded(channel.id) ? epg.programmesOf(channel.id) : [];
+  const list = !isExtra(channel.id) && epg.isLoaded(channel.id) ? epg.programmesOf(channel.id) : [];
   const p = list[findCurrent(list, Date.now())];
   return {
     state,
@@ -454,9 +478,10 @@ app.post('/api/player/:command', async (req, res) => {
 // still there. The stream URL (which carries the playlist's access token) never leaves
 // the server.
 app.post('/api/channels/:id/play', async (req, res) => {
-  const channel = epg.channels.find((c) => c.id === req.params.id);
+  await playlist.ensureFresh();
+  const channel = findChannel(req.params.id);
   if (!channel) return res.status(404).json({ error: 'Channel not found' });
-  const url = await playlist.streamFor(channel);
+  const url = await streamOf(channel);
   if (!url) return res.status(404).json({ error: 'This channel is not in the playlist' });
 
   try {

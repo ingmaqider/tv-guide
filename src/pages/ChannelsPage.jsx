@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useApi } from '../api.js';
-import { ChannelLogo, Status } from '../components.jsx';
+import { ChannelLogo, NoGuideBadge, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
 import { PlayingBadge, usePlayer } from '../player.jsx';
 import PlayButton from '../PlayButton.jsx';
@@ -24,10 +24,11 @@ export default function ChannelsPage() {
                   <div className="channel-name">
                     {ch.name}
                     {ch.id === playingId && <PlayingBadge />}
+                    {ch.noGuide && <NoGuideBadge />}
                   </div>
                 </div>
               </Link>
-              {ch.playable && <PlayButton channelId={ch.id} compact />}
+              {ch.playable && <PlayButton channelId={ch.id} compact noGuide={ch.noGuide} />}
               <StarButton channelId={ch.id} />
             </li>
           ))}
