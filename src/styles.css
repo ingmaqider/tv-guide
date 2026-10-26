@@ -127,7 +127,7 @@ body {
   color: var(--accent);
   font-size: 15px;
   line-height: 1;
-  padding-left: 3px; /* optically center the triangle */
+  padding-left: 6px; /* optically center the triangle */
   cursor: pointer;
 }
 
