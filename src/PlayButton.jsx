@@ -3,8 +3,8 @@ import { send } from './api.js';
 import { usePlayer } from './player.jsx';
 
 // Asks the server to open the channel's stream in VLC. `compact` is the icon-only
-// version used in list rows; `noGuide` marks playlist-only channels (another colour).
-export default function PlayButton({ channelId, compact = false, noGuide = false }) {
+// version used in list rows.
+export default function PlayButton({ channelId, compact = false }) {
   const [state, setState] = useState({ status: 'idle', message: null });
   const { update } = usePlayer();
 
@@ -30,10 +30,10 @@ export default function PlayButton({ channelId, compact = false, noGuide = false
   return (
     <div className={`update ${compact ? 'play-compact' : ''}`}>
       <button
-        className={`${compact ? 'play-icon' : 'play-button'} ${noGuide ? 'no-guide' : ''}`}
+        className={compact ? 'play-icon' : 'play-button'}
         onClick={play}
         disabled={state.status === 'starting'}
-        title={noGuide ? 'Play in VLC (not in the programme guide)' : 'Play in VLC'}
+        title="Play in VLC"
         aria-label="Play in VLC"
       >
         {compact ? '▶' : '▶ Play'}

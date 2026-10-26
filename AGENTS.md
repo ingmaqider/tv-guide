@@ -68,7 +68,8 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
   `playlist.json` holds them with the token: written with mode 0600 and git-ignored.
 - **Scroll restoration depends on the `useApi` cache**: a list must render synchronously
   from cache when navigating back. Don't add loading states that blank cached data.
-- Search state lives in the URL (`?q=`), set with `replace` + `preventScrollReset`.
+- Search state lives in the URL (`?q=`), set with `replace` + `preventScrollReset`. On Now
+  and Favorites it also matches the current programme title (`useChannelSearch(…, { programmes })`).
 - Match the existing style: small components, short comments explaining *why*, CSS
   variables in `src/styles.css` (light default, dark via media query and `data-theme`).
 

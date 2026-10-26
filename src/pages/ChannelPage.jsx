@@ -49,7 +49,7 @@ export default function ChannelPage() {
               {data.noGuide && <NoGuideBadge />}
             </h1>
             <StarButton channelId={data.channel.id} />
-            {data.playable && <PlayButton channelId={data.channel.id} noGuide={data.noGuide} />}
+            {data.playable && <PlayButton channelId={data.channel.id} />}
           </div>
         )}
       </header>

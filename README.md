@@ -3,14 +3,15 @@
 A TV guide for an XMLTV EPG (`epg.xml`) with favorites, search and one-click playback
 in VLC. Runs in the browser or as a desktop app (Electron) on Linux and Windows.
 
-- **Favorites / Now / Channels** tabs: what's on now and next, with search by channel name
+- **Favorites / Now / Channels** tabs: what's on now and next, with search by channel
+  name or, on Now and Favorites, by the title of what's on now (e.g. a film you know)
 - Channel schedule by day, with the current programme highlighted
 - ☆ favorites, ▶ play in VLC (for channels in your M3U playlist). The app opens one VLC
   window and reuses it; the header shows what it's playing, with Pause and Stop, and the
   channel is highlighted in the lists. A VLC you opened yourself is left alone.
 - **Update EPG** downloads a fresh guide and reloads it without a restart
 - Channels that are in your playlist but not in the EPG are listed too, marked **No guide**
-  (with an amber Play button): you can play and favorite them, but there's no schedule
+  (with an amber badge): you can play and favorite them, but there's no schedule
 - **Recommend** asks a local decision model what to watch now, with a prompt you can tune
 - Light / dark / auto theme; scroll position kept when going back to a list
 

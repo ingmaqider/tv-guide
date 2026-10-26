@@ -15,11 +15,11 @@ export default function FavoritesPage() {
     () => (data ? data.channels.filter((ch) => ids.has(ch.id)) : []),
     [data, ids],
   );
-  const { query, setQuery, filtered } = useChannelSearch(favorites);
+  const { query, setQuery, filtered } = useChannelSearch(favorites, { programmes: true });
 
   return (
     <>
-      <SearchBox query={query} setQuery={setQuery} count={data ? filtered.length : undefined} />
+      <SearchBox query={query} setQuery={setQuery} count={data ? filtered.length : undefined} programmes />
       <Status loading={loading || !loaded} error={error}>
         {favorites.length === 0 ? (
           <p className="status">

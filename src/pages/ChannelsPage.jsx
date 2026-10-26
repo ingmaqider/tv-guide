@@ -28,7 +28,7 @@ export default function ChannelsPage() {
                   </div>
                 </div>
               </Link>
-              {ch.playable && <PlayButton channelId={ch.id} compact noGuide={ch.noGuide} />}
+              {ch.playable && <PlayButton channelId={ch.id} compact />}
               <StarButton channelId={ch.id} />
             </li>
           ))}
