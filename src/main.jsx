@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, ScrollRestoration } from 'react-router-dom';
 import Layout from './Layout.jsx';
-import NowPage from './pages/NowPage.jsx';
 import ChannelsPage from './pages/ChannelsPage.jsx';
 import ChannelPage from './pages/ChannelPage.jsx';
 import FavoritesPage from './pages/FavoritesPage.jsx';
@@ -34,8 +33,9 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/favorites" replace /> },
           { path: 'favorites', element: <FavoritesPage /> },
-          { path: 'now', element: <NowPage /> },
           { path: 'channels', element: <ChannelsPage /> },
+          // The old Now tab, now called Channels.
+          { path: 'now', element: <Navigate to="/channels" replace /> },
         ],
       },
       { path: 'channels/:id', element: <ChannelPage /> },

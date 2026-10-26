@@ -20,7 +20,6 @@ export default function Layout() {
         <NowPlaying />
         <nav className="tabs">
           <NavLink to="/favorites" className="tab">Favorites</NavLink>
-          <NavLink to="/now" className="tab">Now</NavLink>
           <NavLink to="/channels" className="tab">Channels</NavLink>
         </nav>
       </header>

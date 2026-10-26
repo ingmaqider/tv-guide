@@ -304,8 +304,10 @@ app.get('/api/now', async (req, res) => {
           next: nextIndex >= 0 ? strip(list[nextIndex]) || null : null,
         };
       }),
-      // Favorited playlist-only channels go last: there's nothing on them to show.
-      ...(ids ? extras().filter((ch) => ids.has(ch.id)) : []).map((ch) => ({ ...ch, current: null, next: null })),
+      // Playlist-only channels go last: there's nothing on them to show.
+      ...extras()
+        .filter((ch) => !ids || ids.has(ch.id))
+        .map((ch) => ({ ...ch, current: null, next: null })),
     ],
   });
 });

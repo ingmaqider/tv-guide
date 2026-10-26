@@ -4,10 +4,9 @@ import { useSearchParams } from 'react-router-dom';
 // Case-insensitive, and ё matches е: EPG titles use either spelling for the same film.
 const normalize = (text) => text.normalize('NFC').toLocaleLowerCase().replaceAll('ё', 'е');
 
-// Filters channels by name, and with `programmes` also by the title of what's on now (for
-// lists from /api/now). The query lives in the URL (?q=) so it survives navigating to a
-// channel and back.
-export function useChannelSearch(channels, { programmes = false } = {}) {
+// Filters channels (from /api/now) by name or by the title of what's on now. The query
+// lives in the URL (?q=) so it survives navigating to a channel and back.
+export function useChannelSearch(channels) {
   const [params, setParams] = useSearchParams();
   const query = params.get('q') || '';
 
@@ -19,19 +18,19 @@ export function useChannelSearch(channels, { programmes = false } = {}) {
     const q = normalize(query.trim());
     if (!channels || !q) return channels || [];
     const matches = (text) => !!text && normalize(text).includes(q);
-    return channels.filter((ch) => matches(ch.name) || (programmes && matches(ch.current?.title)));
-  }, [channels, query, programmes]);
+    return channels.filter((ch) => matches(ch.name) || matches(ch.current?.title));
+  }, [channels, query]);
 
   return { query, setQuery, filtered };
 }
 
-export function SearchBox({ query, setQuery, count, programmes = false }) {
+export function SearchBox({ query, setQuery, count }) {
   return (
     <>
       <input
         className="search"
         type="search"
-        placeholder={programmes ? 'Search channels and what’s on now…' : 'Search channels…'}
+        placeholder="Search channels and what’s on now…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />

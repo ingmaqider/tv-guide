@@ -15,16 +15,16 @@ export default function FavoritesPage() {
     () => (data ? data.channels.filter((ch) => ids.has(ch.id)) : []),
     [data, ids],
   );
-  const { query, setQuery, filtered } = useChannelSearch(favorites, { programmes: true });
+  const { query, setQuery, filtered } = useChannelSearch(favorites);
 
   return (
     <>
-      <SearchBox query={query} setQuery={setQuery} count={data ? filtered.length : undefined} programmes />
+      <SearchBox query={query} setQuery={setQuery} count={data ? filtered.length : undefined} />
       <Status loading={loading || !loaded} error={error}>
         {favorites.length === 0 ? (
           <p className="status">
-            No favorites yet. Tap ☆ next to a channel on the <Link to="/now">Now</Link> or{' '}
-            <Link to="/channels">Channels</Link> tab to add it here.
+            No favorites yet. Tap ☆ next to a channel on the <Link to="/channels">Channels</Link> tab to
+            add it here.
           </p>
         ) : (
           <NowList channels={filtered} />

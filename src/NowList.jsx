@@ -5,7 +5,7 @@ import { StarButton } from './favorites.jsx';
 import { PlayingBadge, usePlayer } from './player.jsx';
 import PlayButton from './PlayButton.jsx';
 
-// Channels with what's on now and next; shared by the Now and Favorites tabs.
+// Channels with what's on now and next; shared by the Channels and Favorites tabs.
 export default function NowList({ channels }) {
   const now = useNow();
   const { playingId } = usePlayer();
