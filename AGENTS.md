@@ -49,8 +49,9 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     via `extraResources`), `LLAMA_SERVER` or PATH.
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
-  - `favorites.jsx`, `player.jsx` (polls `/api/player`; `NowPlaying` bar), `recommend.jsx` — app-wide state as small context
-    providers (above the router, so it survives navigation).
+  - `favorites.jsx`, `player.jsx` (polls `/api/player`; `NowPlaying` bar, which scrolls the
+    list to the channel when clicked: `useReveal`), `recommend.jsx` — app-wide state as small
+    context providers (above the router, so it survives navigation).
 - `electron/main.js` — runs `server/index.js` in a `utilityProcess` and loads the UI from
   it over http://127.0.0.1. Settings and data live in `app.getPath('userData')`.
 

@@ -427,7 +427,21 @@ body {
   font-size: 14px;
 }
 .now-playing-state { color: var(--accent); font-weight: 700; white-space: nowrap; }
-.now-playing-title { flex: 1; min-width: 0; color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.now-playing-title:hover strong { text-decoration: underline; }
+.now-playing-reveal {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.now-playing-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-playing-reveal:hover strong { text-decoration: underline; }
 .now-playing-controls { display: flex; gap: 6px; }
 .channel-header h1 .playing-badge { font-size: 12px; vertical-align: 4px; }
