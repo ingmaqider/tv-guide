@@ -33,3 +33,6 @@ vendor/llama/
 models/
 vlc.json
 vlc.json.tmp
+# Phone access: on/off and the paired phones (token hashes)
+remote.json
+remote.json.tmp

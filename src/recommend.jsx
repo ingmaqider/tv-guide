@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Link } from 'react-router-dom';
 import { formatTime, send, useApi } from './api.js';
 import { ChannelLogo } from './components.jsx';
+import { setLatest, useEvent } from './events.js';
 import { PlayingBadge, usePlayer } from './player.jsx';
 import PlayButton from './PlayButton.jsx';
 
@@ -31,56 +32,65 @@ const saveWish = (wish) => {
   }
 };
 
-// Kept above the router so the result survives opening a channel and coming back.
+const IDLE = { id: 0, status: 'idle' };
+const stopRun = () => send('/api/recommend', 'DELETE').catch((err) => console.error('Failed to stop', err));
+
+// The run itself lives on the server and is shared by every open UI (the `recommend`
+// event: { id, status: idle | running | done | error | stopped, message, result, … }), so
+// one started on the phone shows here too and survives the phone locking its screen.
+// Whether the panel is open, the wish and the scope belong to this page. Kept above the
+// router so the panel survives opening a channel and coming back.
 export function RecommendProvider({ children }) {
-  const [state, setState] = useState({ open: false, status: 'idle' });
+  const run = useEvent('recommend') || IDLE;
+  const [open, setOpen] = useState(false);
   const [wish, setWish] = useState(loadWish);
   const [scope, setScope] = useState('favorites');
-  // Aborting the request closes the connection, which makes the server stop calling the model.
-  const running = useRef(null);
+  // Refused before it started (no model, wish too long): shown until the next Ask.
+  const [refused, setRefused] = useState(null);
+  // Runs asked for here: closing the panel stops those, not one started on another device.
+  const mine = useRef(new Set());
 
-  // `wish` is the free text typed in the panel; the server puts it into the prompt's
+  // A new run, from any device, opens the panel. The first message is the state at
+  // connect, which shouldn't.
+  const seenId = useRef(null);
+  useEffect(() => {
+    if (seenId.current !== null && run.id !== seenId.current && run.status === 'running') setOpen(true);
+    seenId.current = run.id;
+  }, [run.id, run.status]);
+
+  // `text` is the free text typed in the panel; the server puts it into the prompt's
   // {{wish}} placeholder.
-  const run = useCallback(async (text, scope) => {
+  const ask = useCallback(async (text, scope) => {
     saveWish(text);
-    running.current?.abort();
-    const controller = new AbortController();
-    running.current = controller;
-    const { signal } = controller;
-    const startedAt = Date.now();
-    const seconds = () => Math.round((Date.now() - startedAt) / 1000);
-    setState((s) => ({ ...s, open: true, status: 'loading', error: null, message: null, startedAt }));
+    setOpen(true);
+    setRefused(null);
     try {
-      // The server answers 503 while the EPG or the bundled model is still loading.
-      let res;
-      while ((res = await send('/api/recommend', 'POST', { wish: text, scope }, signal)).status === 503) {
-        const { message } = await res.json().catch(() => ({}));
-        setState((s) => ({ ...s, message }));
-        await new Promise((r) => setTimeout(r, 1000));
-        signal.throwIfAborted();
-      }
+      const res = await send('/api/recommend', 'POST', { wish: text, scope });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setState({ open: true, status: 'done', result: body, seconds: seconds() });
+      if (res.status === 202) {
+        mine.current.add(body.id);
+        setLatest('recommend', body);
+      } else if (res.status !== 409) {
+        // 409: one is already running (started elsewhere); the panel shows that one.
+        setRefused(body.error || `HTTP ${res.status}`);
+      }
     } catch (err) {
-      // Stopped: the panel stays open (unless closed) so you can change the wish and ask again.
-      if (signal.aborted) setState((s) => (s.open ? { open: true, status: 'stopped', seconds: seconds() } : s));
-      else setState({ open: true, status: 'error', error: err.message });
-    } finally {
-      if (running.current === controller) running.current = null;
+      setRefused(err.message);
     }
   }, []);
 
-  const stop = useCallback(() => running.current?.abort(), []);
-  const show = useCallback(() => setState((s) => ({ ...s, open: true })), []);
+  const show = useCallback(() => setOpen(true), []);
   const close = useCallback(() => {
-    setState({ open: false, status: 'idle' });
-    running.current?.abort();
-  }, []);
-  const value = useMemo(
-    () => ({ ...state, wish, setWish, scope, setScope, run, stop, show, close }),
-    [state, wish, scope, run, stop, show, close],
-  );
+    setOpen(false);
+    setRefused(null);
+    if (run.status === 'running' && mine.current.has(run.id)) stopRun();
+  }, [run.id, run.status]);
+
+  const value = useMemo(() => {
+    // A refusal shows as an error in place of the last run.
+    const shown = refused ? { ...run, status: 'error', error: refused } : run;
+    return { ...shown, open, wish, setWish, scope, setScope, run: ask, stop: stopRun, show, close };
+  }, [run, refused, open, wish, scope, ask, show, close]);
   return <RecommendContext.Provider value={value}>{children}</RecommendContext.Provider>;
 }
 
@@ -91,8 +101,8 @@ export function RecommendButton() {
   const { status, show } = useRecommend();
   if (!config?.recommend) return null;
   return (
-    <button className="update-button" onClick={show} disabled={status === 'loading'} title="Ask the decision model what to watch now">
-      {status === 'loading' ? 'Thinking…' : 'Recommend'}
+    <button className="update-button" onClick={show} title="Ask the decision model what to watch now">
+      {status === 'running' ? 'Thinking…' : 'Recommend'}
     </button>
   );
 }
@@ -118,7 +128,7 @@ function ScopeSwitch() {
           type="button"
           className={scope === o.value ? 'active' : ''}
           aria-pressed={scope === o.value}
-          disabled={status === 'loading'}
+          disabled={status === 'running'}
           onClick={() => setScope(o.value)}
         >
           {o.label}
@@ -131,7 +141,7 @@ function ScopeSwitch() {
 // The wish box: focused when the panel opens, Enter asks.
 function WishForm() {
   const { status, wish, setWish, scope, run, stop } = useRecommend();
-  const loading = status === 'loading';
+  const loading = status === 'running';
   return (
     <form
       className="wish"
@@ -185,9 +195,9 @@ export function RecommendPanel() {
       <WishForm />
       <div className="recommend-scope">
         <ScopeSwitch />
-        {scope !== 'favorites' && status !== 'loading' && <span className="muted small">Slower: many model calls</span>}
+        {scope !== 'favorites' && status !== 'running' && <span className="muted small">Slower: many model calls</span>}
       </div>
-      {status === 'loading' && (
+      {status === 'running' && (
         <p className="muted">
           {message || 'Asking the model…'} <Elapsed since={startedAt} />
         </p>

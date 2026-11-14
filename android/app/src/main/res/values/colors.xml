@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web app's light theme colors (bg, text, muted, accent in src/styles.css). -->
+    <color name="bg">#f5f6f8</color>
+    <color name="text">#1c1f24</color>
+    <color name="muted">#6b7280</color>
+    <color name="accent">#2563eb</color>
+    <color name="error">#dd3333</color>
+    <color name="ic_launcher_background">#2563eb</color>
+</resources>

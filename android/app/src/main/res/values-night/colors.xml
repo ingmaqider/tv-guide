@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web app's dark theme. -->
+    <color name="bg">#111317</color>
+    <color name="text">#e6e8eb</color>
+    <color name="muted">#9aa1ab</color>
+    <color name="accent">#6b9bff</color>
+    <color name="error">#ff6b6b</color>
+</resources>

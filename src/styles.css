@@ -445,3 +445,53 @@ body {
 .now-playing-reveal:hover strong { text-decoration: underline; }
 .now-playing-controls { display: flex; gap: 6px; }
 .channel-header h1 .playing-badge { font-size: 12px; vertical-align: 4px; }
+
+/* Phone: VLC volume in the Now playing bar (a row of its own, so the pill gets corners) */
+.now-playing:has(.volume) { border-radius: 16px; padding-bottom: 8px; }
+.volume { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding-right: 6px; }
+.volume input[type='range'] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.volume-step {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.volume-value { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Phone: pairing screen */
+.pair { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+.pair h1 { margin: 0 0 12px; font-size: 22px; }
+.pair .status { padding: 16px 0; text-align: left; }
+.pair-form { display: flex; flex-direction: column; gap: 4px; margin: 16px 0; }
+.pair-form .play-button { align-self: flex-start; margin: 4px 0 0; }
+
+/* Desktop: pairing prompt and the Phone panel */
+.pairing { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.pairing-actions { display: flex; gap: 8px; }
+.pairing-actions .play-button { margin: 0; }
+.update-button.active { background: var(--accent); color: #fff; }
+.phone-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; cursor: pointer; }
+.phone-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.phone-panel p { margin: 6px 0; }
+.phone-address { font-size: 18px; user-select: all; }
+.phone-panel code { padding: 1px 4px; border-radius: 4px; background: var(--surface); user-select: all; }
+.phone-devices-title { margin: 12px 0 4px; font-size: 14px; }
+.phone-devices { list-style: none; margin: 0 0 8px; padding: 0; }
+.phone-devices li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+/* Phone: Connection panel */
+.connection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0; }
+.connection-actions .play-button { margin: 0; }
+.play-button.danger { background: #d33; }
+/* Desktop: the pairing QR code (dark on white in both themes, for scanners) */
+.pair-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 8px 0; }
+.pair-qr > div:last-child { flex: 1; min-width: 220px; }
+.pair-qr-code { width: 168px; height: 168px; flex-shrink: 0; border-radius: 8px; background: #fff; overflow: hidden; }
+.pair-qr-code svg { display: block; width: 100%; height: 100%; }
+.pair-qr-addresses { display: inline-flex; margin: 4px 0; }

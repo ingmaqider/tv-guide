@@ -14,6 +14,9 @@ in VLC. Runs in the browser or as a desktop app (Electron) on Linux and Windows.
 - Channels that are in your playlist but not in the EPG are listed too, marked **No guide**
   (with an amber badge): you can play and favorite them, but there's no schedule
 - **Recommend** asks a local decision model what to watch now, with a prompt you can tune
+- **Phone remote**: an Android app (or a phone browser) shows the same favorites and
+  channels, plays them in VLC on the computer, controls VLC's volume, refreshes the
+  playlist and runs Recommend with the computer's model. See [Phone](#phone)
 - Light / dark / auto theme; scroll position kept when going back to a list
 
 ## Requirements
@@ -43,12 +46,13 @@ the Electron binary download; run `node node_modules/electron/install.js`.
 | `npm run build` | Build the frontend into `dist/` |
 | `npm start` | Serve the API and the built frontend on http://localhost:3001 |
 | `npm run app` | Build the frontend and run the desktop app from source |
+| `npm run android` | Build the Android app (see [Phone](#phone)) |
 
 Browser mode keeps its data in the project folder: `epg.xml` (downloaded on first start
 if missing), `favorites.json`, `last-played.json`, `recommend-prompt.txt`, `playlist.json`
 (the last downloaded playlist, used when the playlist server is unreachable) and `vlc.json`
 (how to reach the VLC window the app opened). The last two contain your stream links, so
-they're git-ignored.
+they're git-ignored, as is `remote.json` (phone access settings and paired phones).
 
 ## Recommendations (local decision model)
 
@@ -124,6 +128,58 @@ the CUDA build is faster on NVIDIA but also needs the CUDA runtime DLLs (the mat
 `cudart-…` zip). Models aren't bundled: at 4.5 GB, H2O Lightning Q8_0 is over the Windows
 installer's size limit.
 
+## Phone
+
+The phone is a remote for TV Guide on the computer: it works while the computer's TV
+Guide is running. Favorites, playing, Recommend and the rest happen on the computer, and
+changes show on both straight away.
+
+1. On the computer, click **Phone** in TV Guide and turn on **Let phones on this network
+   control TV Guide**. The panel shows a QR code and the computer's address, e.g.
+   `192.168.1.10`.
+2. Pair the phone, either way:
+   - **Scan the QR code**: tap **Scan QR code** in the TV Guide app, or point the phone's
+     camera at it to open TV Guide in the phone's browser. That pairs the phone straight
+     away. Each code works once, is replaced every 5 minutes, and only exists while the
+     Phone panel is open. Scanning in the app uses Google Play services.
+   - **Type the address** in the app (or open `http://192.168.1.10:47832` in the phone's
+     browser). The phone asks to pair; click **Allow** in TV Guide on the computer.
+
+   That's needed once per phone. Paired phones are listed in the Phone panel, where you
+   can remove them.
+
+To unpair from the phone, tap **Connection** and **Unpair this phone**. That removes it on
+the computer too; to use it again, connect and allow it again.
+
+On the phone, the bar showing what's playing has a volume slider for VLC, and in the app
+the phone's volume keys control VLC while it's open. **Refresh playlist** downloads the
+playlist again.
+
+Phone access is off until you turn it on. It uses port 47832 on all network interfaces,
+plain HTTP: it's meant for your home network. The computer needs a fixed address (e.g. a
+DHCP reservation on the router); if it changes, enter the new one in the app (**Use a
+different computer** / **Change address**).
+
+**Firewall.** Fedora's firewalld blocks the port by default:
+`sudo firewall-cmd --permanent --add-port=47832/tcp && sudo firewall-cmd --reload`.
+Windows asks the first time phone access is turned on; allow it on private networks.
+
+### Building the Android app
+
+The app (in `android/`) is a small WebView shell: it asks for the address once and then
+shows the pages TV Guide serves to phones, so it doesn't need updating when TV Guide does.
+Building it needs JDK 17+ and the Android SDK (platform 35, build-tools 35); put the SDK
+path in `android/local.properties` (`sdk.dir=/path/to/Android/Sdk`) or `ANDROID_HOME`.
+
+```bash
+npm run android   # → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Copy the APK to the phone and open it to install (allow installing from that app when
+Android asks), or `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`. It's
+signed with your debug key: an APK built on another machine can't update it without
+uninstalling first.
+
 ## Building the desktop app
 
 | Command | Output in `release/` |
@@ -145,4 +201,4 @@ in its own folder:
 
 Put a `.env` there (same format as `.env.example`). The folder also holds `epg.xml`
 (downloaded on first run), `favorites.json`, `last-played.json`, `playlist.json`,
-`vlc.json` and `recommend-prompt.txt`.
+`vlc.json`, `recommend-prompt.txt` and `remote.json` (phone access and paired phones).

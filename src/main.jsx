@@ -6,6 +6,7 @@ import ChannelsPage from './pages/ChannelsPage.jsx';
 import ChannelPage from './pages/ChannelPage.jsx';
 import FavoritesPage from './pages/FavoritesPage.jsx';
 import { FavoritesProvider } from './favorites.jsx';
+import { PairGate } from './phone.jsx';
 import { PlayerProvider } from './player.jsx';
 import { RecommendProvider } from './recommend.jsx';
 import ScrollButtons from './ScrollButtons.jsx';
@@ -44,14 +45,18 @@ const router = createBrowserRouter([
   },
 ]);
 
+// PairGate: on a phone that isn't paired yet, the pairing screen instead of the app (whose
+// requests would all be refused).
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <FavoritesProvider>
-      <PlayerProvider>
-        <RecommendProvider>
-          <RouterProvider router={router} />
-        </RecommendProvider>
-      </PlayerProvider>
-    </FavoritesProvider>
+    <PairGate>
+      <FavoritesProvider>
+        <PlayerProvider>
+          <RecommendProvider>
+            <RouterProvider router={router} />
+          </RecommendProvider>
+        </PlayerProvider>
+      </FavoritesProvider>
+    </PairGate>
   </React.StrictMode>,
 );

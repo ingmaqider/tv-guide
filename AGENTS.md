@@ -25,10 +25,32 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     changes, and the URL itself never reaches the browser. The API marks them
     `noGuide: true`; `findChannel()` / `streamOf()` in index.js cover both kinds, and
     favorites checks skip them (`favoritesLoaded()`: there's no schedule to wait for).
+  - `events.js` — WebSocket hub at `/api/events` (the `ws` package) on both listeners.
+    Topics `player`, `favorites`, `epg`, `playlist`, `recommend`, and `remote` (local
+    only); each message is `{ type, data }` with the topic's whole state, all topics on
+    connect (so a phone waking up gets a full snapshot). REST stays for loading data and
+    commands. While any client is connected, index.js polls VLC every 1.5 s and publishes
+    `player` only on change (no per-client polling), and retries the playlist.
+  - `remote.js` — phone access: a second `http.Server` on `0.0.0.0:47832` (`REMOTE_PORT`,
+    `REMOTE_HOST`) for the same Express app, marking requests `req.viaLan`. Off until
+    turned on in the Phone panel (`remote.json`, 0600, `REMOTE_FILE`). Pairing:
+    `POST /api/pair` waits until the desktop answers (`/api/remote/pairings/:id`), then
+    sets an HttpOnly SameSite=Strict cookie; only token hashes are stored. On the LAN
+    listener everything under `/api/` except `/api/hello` and `/api/pair` needs a paired
+    device (401 `{ pair: true }`), the Host must be an IP (DNS rebinding), and
+    `/api/remote*` is 404 (`localOnly`): a phone can't approve itself or turn access on.
+    QR pairing: `POST /api/remote/code` (local) makes a one-time code, shown by the open
+    Phone panel as `http://<IP>:<port>/?pair=<code>` and dropped on close
+    (`DELETE`), on use, or after 5 min; `POST /api/pair { code }` pairs at once without
+    Allow. The code is only in `state()` (the local-only `remote` topic).
+    Revoking a device (desktop Remove, or `POST /api/unpair` from the phone itself, which
+    also clears the cookie) closes its sockets with 4401.
   - `vlc.js` — the VLC window the app opens, through VLC's HTTP interface (started with
     `--extraintf=http`, a free 127.0.0.1 port, a random password, `--no-one-instance`).
     Play reuses the window (`in_play`), else starts a new one. `GET /api/player` maps the
-    current item's URL back to a channel; `POST /api/player/pause|stop`. VLC applies
+    current item's URL back to a channel; `POST /api/player/pause|stop`, and
+    `POST /api/player/volume { value }` (percent, 0–125; VLC's scale is 0–512 with
+    256 = 100%). VLC applies
     switches and stops after a second or two, so `status()` reports the expected state
     until it does. Port, password and played URLs are saved in `vlc.json` (0600: URLs carry
     the token) so a restarted app reconnects to a VLC that's still open.
@@ -39,8 +61,11 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     (default), playable or all, chosen in the panel) into one `choice` question
     for llama-server's `/v1/systemone` (decision models such as H2O Lightning; not chat
     completions). Option keys are channel names; strings are NFC-normalized. More
-    candidates than `RECOMMEND_BATCH` run as knockout rounds. Stop in the panel aborts
-    the fetch; the route aborts its model calls when the connection closes.
+    candidates than `RECOMMEND_BATCH` run as knockout rounds (`onProgress(done, total)`).
+    In index.js a run is one shared server-side job (`rec`): `POST /api/recommend` starts
+    it (202, or 409 while one runs) and waits for the EPG/model itself; progress and the
+    result go out as the `recommend` event; `DELETE /api/recommend` stops it. It doesn't
+    depend on the request's connection, so a phone locking its screen doesn't stop it.
   - `llama.js` — runs llama-server as a child process when `LLM_URL` isn't set and a model
     is found (`LLM_MODEL_FILE`, `MODELS_DIR`): free 127.0.0.1 port, random API key, waits on
     `/health`, restarts after a crash on the next request. Stopped on SIGTERM/SIGINT or a
@@ -49,9 +74,28 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
     via `extraResources`), `LLAMA_SERVER` or PATH.
 - `src/` — React 18 + react-router 6 (data router), built by Vite. No state library.
   - `api.js` — `useApi` (per-URL cache, polling, `reloadAll()`), `send()` for mutations.
-  - `favorites.jsx`, `player.jsx` (polls `/api/player`; `NowPlaying` bar, which scrolls the
-    list to the channel when clicked: `useReveal`), `recommend.jsx` — app-wide state as small
-    context providers (above the router, so it survives navigation).
+  - `events.js` — the page's one socket to `/api/events`: `useEvent(topic)`,
+    `useEventEffect(topic, fn)`, `setLatest()` (apply a command's response at once),
+    `useConnected()`. Reconnects with backoff, after the page was hidden > 10 s, and calls
+    `reloadAll()` on reconnect. A 401 `{ pair: true }` from `fetchJson` or close code 4401 fires the `UNPAIRED` window event: `PairGate` shows the pairing screen and the socket stops retrying.
+  - `favorites.jsx`, `player.jsx` (`player` event; `NowPlaying` bar, which scrolls the
+    list to the channel when clicked: `useReveal`; the phone's volume slider),
+    `recommend.jsx` (shows the shared `recommend` job; panel open/wish/scope are per page)
+    — app-wide state as small context providers (above the router, so it survives
+    navigation). Favorites added on another device call `reloadAll()`.
+  - `phone.jsx` — `PairGate` (skipped on 127.0.0.1/localhost; otherwise `/api/hello`
+    decides between the app and the pairing screen), `ConnectionNotice`, and the desktop's
+    `PhoneButton`/`PhonePanel`/`PairingPrompt` (on the phone, the same button/panel are
+    "Connection": which computer, Unpair with an inline confirm, since Android WebView
+    answers `confirm()` with cancel). `/api/config` has `remote: true` on the
+    LAN listener; phone-only UI (volume, **Refresh playlist**) keys off that.
+- `android/` — the Android app: one Java `MainActivity` (plain `Activity`; AndroidX only comes in with the QR scanner), a WebView on
+  `http://<IP>:47832` after checking `/api/hello`. `window.TVGuideApp` bridge:
+  `deviceName()`, `changeServer()`, `setVolumeKeys(bool)`. **Scan QR code** uses Play
+  services' code scanner (`play-services-code-scanner`, no camera permission; needs
+  `android.useAndroidX`) and opens `/?pair=<code>`. The volume keys call the page's
+  `window.tvGuideVolumeStep(±1)`. Cleartext HTTP is allowed in the manifest. AGP 8.7.3,
+  Gradle wrapper 8.11.1, compile/target SDK 35, min 26. `npm run android` builds it.
 - `electron/main.js` — runs `server/index.js` in a `utilityProcess` and loads the UI from
   it over http://127.0.0.1. Settings and data live in `app.getPath('userData')`.
 
@@ -62,7 +106,9 @@ Notes for coding agents working on this repo. User-facing docs are in README.md.
   not contain them (check `release/*/resources/app.asar` with grep after building).
 - **Mutating requests need `X-TV-Guide: 1`** (use `send()` in `src/api.js`). The server
   rejects others with 403; this blocks other websites from driving the local API (it can
-  launch VLC). Keep the server bound to 127.0.0.1 by default.
+  launch VLC). Keep the main listener bound to 127.0.0.1. The only LAN access is the
+  opt-in phone listener (remote.js), which needs a paired device; new desktop-only
+  routes on it must use `localOnly`. WebSocket upgrades check Origin against Host.
 - **503 means "not loaded yet, retry".** `fetchJson` retries on 503. Endpoints return 503
   until the data they need is parsed (`epg.isLoaded(id)` / `epg.complete`).
 - **Stream URLs never reach the browser.** The API exposes only `playable: boolean`.
@@ -90,7 +136,17 @@ There is no test suite. Verify changes by running the app:
   `vlc -I dummy --vout dummy --aout dummy "$@"`, so no window opens but the HTTP interface
   works. Use a fake playlist pointing at local HLS (ffmpeg `-f hls`) instead of real
   streams. Find test VLCs by their `--http-port` (not `pkill -f`, which can hit the user's
-  VLC or your own shell).
+  VLC or your own shell). Volume needs a real audio output (`--aout dummy` and `afile`
+  always report 0): drop `--aout dummy` and make the HLS audio silent (ffmpeg
+  `-f lavfi -i anullsrc`).
+- Phone access: put `{"enabled":true,"devices":[]}` in a temp `REMOTE_FILE` and set
+  `REMOTE_HOST=127.0.0.2` (still an IP, but not on the LAN) and a test `REMOTE_PORT`.
+  Drive the desktop at 127.0.0.1 and the "phone" at 127.0.0.2 in two Playwright contexts;
+  pair through the UI or `POST /api/pair` + `POST /api/remote/pairings/:id`. Node's
+  `fetch` can't set Host; use `http.request` to test the IP-only Host check.
+- Android: `npm run android` with `JAVA_HOME` (17+) and the SDK in
+  `android/local.properties`. An emulator reaches the computer's 127.0.0.1 as 10.0.2.2,
+  so a test server with `REMOTE_HOST=127.0.0.1` works without exposing anything.
 - Recommend: needs a llama-server with a decision GGUF; the user runs H2O Lightning
   (`~/models/h2o-lightning-4b-gguf/h2o-lightning-4b-Q8_0.gguf`, usually on
   127.0.0.1:9931). Set `LLM_URL`, and `RECOMMEND_PROMPT_FILE` to a temp copy so the

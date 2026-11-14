@@ -1,22 +1,31 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchJson, send } from './api.js';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { reloadAll, send } from './api.js';
+import { useEventEffect } from './events.js';
 
 const FavoritesContext = createContext(null);
 
+// The favorite channel ids, pushed by the server (the `favorites` event) so a star added on
+// the phone shows on the desktop and the other way round.
 export function FavoritesProvider({ children }) {
   const [ids, setIds] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    fetchJson('/api/favorites')
-      .then(setIds)
-      .catch((err) => console.error('Failed to load favorites', err))
-      .finally(() => setLoaded(true));
-  }, []);
-
   // Optimistic update; the server's response is the source of truth, and we revert on failure.
   const idsRef = useRef(ids);
   idsRef.current = ids;
+  const loadedRef = useRef(false);
+
+  const onFavorites = useCallback((list) => {
+    // Added on another device: the Favorites list's data (/api/now?favorites=1) doesn't
+    // have that channel yet. Stars added here are already in idsRef (optimistic).
+    const known = new Set(idsRef.current);
+    if (loadedRef.current && list.some((id) => !known.has(id))) reloadAll();
+    loadedRef.current = true;
+    idsRef.current = list;
+    setIds(list);
+    setLoaded(true);
+  }, []);
+  useEventEffect('favorites', onFavorites);
 
   const toggle = useCallback((id) => {
     const prev = idsRef.current;

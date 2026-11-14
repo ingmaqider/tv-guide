@@ -1,10 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { fetchJson, send } from './api.js';
+import { send, useApi } from './api.js';
+import { setLatest, useEvent } from './events.js';
 import { useFavorites } from './favorites.jsx';
 
-const POLL_MS = 3000;
+const CLOSED = { state: 'closed', channel: null, volume: null };
 const PlayerContext = createContext(null);
+// Same as the server's MAX_VOLUME (VLC's own slider goes to 125%).
+const MAX_VOLUME = 125;
+const VOLUME_STEP = 5;
+// While dragging the slider, at most this often to VLC.
+const VOLUME_SEND_MS = 150;
 
 export const rowId = (channelId) => `channel-${channelId}`;
 
@@ -15,46 +21,67 @@ function scrollToRow(channelId) {
   return !!row;
 }
 
-// What the VLC window opened by this app is doing ({ state, channel, programme }), polled
-// from the server. Play and the controls update it from their responses straight away.
+const update = (status) => setLatest('player', status);
+
+// What the VLC window opened by this app is doing ({ state, channel, programme, volume }),
+// pushed by the server (the `player` event). Play and the controls update it from their
+// responses straight away.
 export function PlayerProvider({ children }) {
-  const [status, setStatus] = useState({ state: 'closed', channel: null });
+  const status = useEvent('player') || CLOSED;
   const [revealId, setRevealId] = useState(null);
 
-  useEffect(() => {
-    let timer;
-    let stopped = false;
-    const poll = () => {
-      fetchJson('/api/player')
-        .then((s) => !stopped && setStatus(s))
-        .catch((err) => console.error('Failed to get player status', err))
-        .finally(() => {
-          if (!stopped) timer = setTimeout(poll, POLL_MS);
-        });
-    };
-    poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
+  const command = useCallback(async (name, body) => {
+    const res = await send(`/api/player/${name}`, 'POST', body);
+    const next = await res.json();
+    if (res.ok) update(next);
   }, []);
 
-  const command = useCallback(async (name) => {
-    const res = await send(`/api/player/${name}`, 'POST');
-    const body = await res.json();
-    if (res.ok) setStatus(body);
-  }, []);
+  // The volume just chosen here is shown until VLC reports it, so the slider doesn't jump
+  // back while requests are in flight. Sends are throttled while dragging.
+  const [chosen, setChosen] = useState(null); // { value, at }
+  const volume = chosen && Date.now() - chosen.at < 1500 ? chosen.value : status.volume;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const toSend = useRef(null);
+  const sendTimer = useRef(null);
+  const setVolume = useCallback(
+    (v) => {
+      const value = Math.min(MAX_VOLUME, Math.max(0, Math.round(v)));
+      setChosen({ value, at: Date.now() });
+      volumeRef.current = value;
+      toSend.current = value;
+      sendTimer.current ??= setTimeout(() => {
+        sendTimer.current = null;
+        command('volume', { value: toSend.current }).catch((err) => console.error('Failed to set volume', err));
+      }, VOLUME_SEND_MS);
+    },
+    [command],
+  );
+
+  // In the Android app the hardware volume keys control VLC while it's open (MainActivity
+  // asks the page through tvGuideVolumeStep).
+  const vlcOpen = status.volume != null;
+  useEffect(() => {
+    const app = window.TVGuideApp;
+    if (!app) return;
+    app.setVolumeKeys(vlcOpen);
+    window.tvGuideVolumeStep = (direction) => {
+      if (volumeRef.current != null) setVolume(volumeRef.current + direction * VOLUME_STEP);
+    };
+  }, [vlcOpen, setVolume]);
 
   const value = useMemo(
     () => ({
       ...status,
+      volume,
+      setVolume,
       playingId: status.channel?.id ?? null,
-      update: setStatus,
+      update,
       command,
       revealId,
       setRevealId,
     }),
-    [status, command, revealId],
+    [status, volume, setVolume, command, revealId],
   );
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
@@ -81,12 +108,35 @@ export function PlayingBadge() {
   );
 }
 
+// VLC's volume, on the phone only (the desktop has VLC's own window for that).
+function VolumeControl() {
+  const { volume, setVolume } = usePlayer();
+  if (volume == null) return null;
+  return (
+    <div className="volume">
+      <button className="volume-step" onClick={() => setVolume(volume - VOLUME_STEP)} aria-label="Quieter">−</button>
+      <input
+        type="range"
+        min="0"
+        max={MAX_VOLUME}
+        step="1"
+        value={volume}
+        onChange={(e) => setVolume(Number(e.target.value))}
+        aria-label="VLC volume"
+      />
+      <button className="volume-step" onClick={() => setVolume(volume + VOLUME_STEP)} aria-label="Louder">+</button>
+      <span className="volume-value">{volume}%</span>
+    </div>
+  );
+}
+
 // Shown in the header while VLC plays (or has paused) one of our channels.
 export function NowPlaying() {
   const { state, channel, programme, command, setRevealId } = usePlayer();
   const { ids } = useFavorites();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { data: config } = useApi('/api/config');
   if (!channel) return null;
 
   // Row hidden by a search, or not on this tab: drop the search, and leave Favorites only
@@ -116,6 +166,7 @@ export function NowPlaying() {
           </button>
         </span>
       )}
+      {config?.remote && <VolumeControl />}
     </div>
   );
 }

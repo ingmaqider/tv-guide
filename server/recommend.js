@@ -167,13 +167,33 @@ function split(items, size) {
   return Array.from({ length: count }, (_, i) => items.slice(i * per, (i + 1) * per));
 }
 
+// How many from each batch go through to the next round: enough that the next round is at
+// most one batch where possible.
+const keepPerBatch = (batches, size) => Math.max(1, Math.floor(size / batches.length));
+
+// The number of model calls a knockout over `count` candidates takes, for progress.
+function countCalls(count, size) {
+  let pool = count;
+  let calls = 1;
+  while (pool > size) {
+    const batches = split(Array.from({ length: pool }), size);
+    const keep = keepPerBatch(batches, size);
+    calls += batches.length;
+    pool = batches.reduce((n, b) => n + Math.min(keep, b.length), 0);
+  }
+  return calls;
+}
+
 /**
  * Ranks any number of candidates ([{ channel, programme }]). Probabilities are only
  * comparable within one call, so `ranked` is the final round, best first, and `eliminated`
- * counts the candidates knocked out in earlier rounds.
+ * counts the candidates knocked out in earlier rounds. `onProgress(done, total)` is called
+ * after each model call.
  */
-export async function recommend({ candidates, batchSize, parallel, favorites, lastPlayed, wish, ...options }) {
+export async function recommend({ candidates, batchSize, parallel, favorites, lastPlayed, wish, onProgress, ...options }) {
   const size = Math.min(Math.max(batchSize, 2), MAX_OPTIONS);
+  const total = countCalls(candidates.length, size);
+  let done = 0;
   const context = {
     now: nowFmt.format(Date.now()),
     favorites: favorites.join(', ') || 'none',
@@ -181,9 +201,11 @@ export async function recommend({ candidates, batchSize, parallel, favorites, la
     wish: wish || '',
   };
   // Stopped by the caller (options.signal): no further batches are sent.
-  const call = (batch) => {
+  const call = async (batch) => {
     options.signal?.throwIfAborted();
-    return rankBatch(batch, { ...options, context });
+    const result = await rankBatch(batch, { ...options, context });
+    onProgress?.(++done, total);
+    return result;
   };
 
   let pool = candidates;
@@ -191,8 +213,7 @@ export async function recommend({ candidates, batchSize, parallel, favorites, la
   let rounds = 0;
   while (pool.length > size) {
     const batches = split(pool, size);
-    // Advance enough from each batch that the next round is at most one batch where possible.
-    const keep = Math.max(1, Math.floor(size / batches.length));
+    const keep = keepPerBatch(batches, size);
     const results = await mapLimit(batches, parallel, call);
     calls += batches.length;
     rounds++;

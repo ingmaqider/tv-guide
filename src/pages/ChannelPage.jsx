@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { dayKey, formatDay, formatTime, progress, useApi, useNow } from '../api.js';
 import { ChannelLogo, NoGuideBadge, ProgressBar, Status } from '../components.jsx';
 import { StarButton } from '../favorites.jsx';
+import { ConnectionNotice, PairingPrompt } from '../phone.jsx';
 import { PlayingBadge, usePlayer } from '../player.jsx';
 import PlayButton from '../PlayButton.jsx';
 import PlaylistNotice from '../PlaylistNotice.jsx';
@@ -54,6 +55,8 @@ export default function ChannelPage() {
         )}
       </header>
       <main className="content">
+        <ConnectionNotice />
+        <PairingPrompt />
         <PlaylistNotice />
         <Status loading={loading} error={error}>
           {days.length === 0 ? (

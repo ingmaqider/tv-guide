@@ -39,6 +39,7 @@ function startServer() {
         PLAYLIST_FILE: path.join(data, 'playlist.json'),
         LAST_PLAYED_FILE: path.join(data, 'last-played.json'),
         VLC_STATE_FILE: path.join(data, 'vlc.json'),
+        REMOTE_FILE: path.join(data, 'remote.json'),
         RECOMMEND_PROMPT_FILE: path.join(data, 'recommend-prompt.txt'),
         // A model (.gguf) put here is run with the bundled llama.cpp; see README.
         MODELS_DIR: path.join(data, 'models'),
@@ -49,6 +50,8 @@ function startServer() {
     });
     server.on('message', (msg) => {
       if (msg?.type === 'listening') resolve(msg.port);
+      // A phone asks to pair: the prompt is in the window, so make sure it gets noticed.
+      if (msg?.type === 'pairing' && win && !win.isFocused()) win.flashFrame(true);
     });
     server.on('exit', (code) => {
       reject(new Error(`The server stopped (exit code ${code}).`));
@@ -73,6 +76,7 @@ function createWindow(port) {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.once('ready-to-show', () => win.show());
+  win.on('focus', () => win.flashFrame(false));
 
   // The window only ever shows the app itself.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

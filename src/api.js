@@ -2,6 +2,9 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Fired on window when the server says this phone isn't paired (see phone.jsx).
+export const UNPAIRED = 'tvguide:unpaired';
+
 // For requests that change something; the server rejects them without this header
 // (see server/index.js), which keeps other websites from driving the local server.
 export const send = (url, method, body, signal) =>
@@ -21,6 +24,8 @@ export async function fetchJson(url, signal) {
       continue;
     }
     const body = await res.json();
+    // A phone that isn't (or no longer is) paired: PairGate shows the pairing screen.
+    if (res.status === 401 && body.pair) window.dispatchEvent(new Event(UNPAIRED));
     if (!res.ok) throw new Error(body.error || `Request failed: ${res.status}`);
     return body;
   }

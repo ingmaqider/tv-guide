@@ -14,16 +14,19 @@
     "start": "node server/index.js",
     "app": "vite build && electron .",
     "dist": "vite build && electron-builder --linux AppImage rpm",
-    "dist:win": "vite build && electron-builder --win nsis portable zip --x64"
+    "dist:win": "vite build && electron-builder --win nsis portable zip --x64",
+    "android": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.15.3",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",

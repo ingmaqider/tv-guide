@@ -18,6 +18,10 @@ const STARTING_MS = 15000;
 const SWITCHING_MS = 5000;
 // VLC's HTTP interface is quick when it's up; a slow answer means it's gone or stuck.
 const REQUEST_TIMEOUT_MS = 1500;
+// VLC's HTTP interface counts volume from 0 to 512, with 256 being 100%. The API uses
+// percent, up to VLC's own slider maximum.
+const VLC_FULL_VOLUME = 256;
+export const MAX_VOLUME = 125;
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -122,8 +126,9 @@ export class Vlc {
     this.expected = { state, channelId, until: Date.now() + ms };
   }
 
-  // { state: 'playing' | 'paused' | 'stopped' | 'opening' | 'closed', channelId }.
-  // channelId is null when VLC plays something this app didn't start.
+  // { state: 'playing' | 'paused' | 'stopped' | 'opening' | 'closed', channelId, volume }.
+  // channelId is null when VLC plays something this app didn't start; volume (percent) is
+  // null when VLC is closed.
   async status() {
     const actual = await this.actualStatus();
     const expected = this.expected;
@@ -136,18 +141,25 @@ export class Vlc {
       this.expected = null;
       return actual;
     }
-    return { state: expected.state, channelId: expected.channelId };
+    return { state: expected.state, channelId: expected.channelId, volume: actual.volume };
   }
 
   async actualStatus() {
     const status = await this.request('status.json');
-    if (!status) return { state: 'closed', channelId: null };
-    if (status.state === 'stopped' || status.currentplid < 0) return { state: 'stopped', channelId: null };
+    if (!status) return { state: 'closed', channelId: null, volume: null };
+    const volume = Number.isFinite(status.volume) ? Math.round((status.volume * 100) / VLC_FULL_VOLUME) : null;
+    if (status.state === 'stopped' || status.currentplid < 0) return { state: 'stopped', channelId: null, volume };
     // The current item's URL says which channel it is; the title could be anything.
     const playlist = await this.request('playlist.json');
     const items = playlist?.children?.flatMap((node) => node.children || []) || [];
     const current = items.find((item) => item.current === 'current' || Number(item.id) === status.currentplid);
-    return { state: status.state, channelId: (current && this.channels[current.uri]) ?? null };
+    return { state: status.state, channelId: (current && this.channels[current.uri]) ?? null, volume };
+  }
+
+  // Percent, 0 to MAX_VOLUME. False if VLC isn't open.
+  async setVolume(percent) {
+    const value = Math.round((Math.min(Math.max(percent, 0), MAX_VOLUME) * VLC_FULL_VOLUME) / 100);
+    return !!(await this.request('status.json', { command: 'volume', val: value }));
   }
 
   // pl_pause toggles between playing and paused.

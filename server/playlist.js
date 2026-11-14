@@ -143,6 +143,8 @@ export class Playlist {
         throw err;
       } finally {
         this.pending = null;
+        // Tells the open UIs (status() changed either way: new list, or a new error).
+        this.onChange?.();
       }
     })();
     return this.pending;
